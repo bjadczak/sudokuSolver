@@ -12,15 +12,7 @@
 
 __device__ void printBoard(int* sudokuBoard, int* targetCell, int id)
 {
-    for(int i = 0; i < BOARD_SIZE; i++)
-    {
-        for(int j = 0; j < BOARD_SIZE; j++)
-        {
-            printf("%d ", sudokuBoard[i*BOARD_SIZE + j]);
-        }
-        printf("\n")
-    }
-    printf("TARGET CELL - %d\n", *targetCell);
+    printf("TARGET CELL - %d (id: %d)\n", targetCell[id], id);
 }
 
 __global__ void fillEmpty(int* sudokuBoard, int* targetCell)
@@ -30,11 +22,46 @@ __global__ void fillEmpty(int* sudokuBoard, int* targetCell)
     #endif
 
     // Tables we use to count appearence
-    int appeardInRow[BOARD_SIZE];
-    int appeardInColumn[BOARD_SIZE];
-    int appeardInBlock[BOARD_SIZE];
+    int appeardInRow[BOARD_SIZE] = { 0 };
+    int appeardInColumn[BOARD_SIZE] = { 0 };
+    // int appeardInBlock[BOARD_SIZE];
+
+    int target = targetCell[threadIdx.x];
+
+    for(int i = 0; i < BOARD_SIZE; i++)
+    {
+        int tmp = sudokuBoard[ target%BOARD_SIZE + i ];
+        if (tmp > 0)
+        {
+            appeardInRow[ tmp - 1 ]++;
+        }
+    }
+
+    for(int i = 0; i < BOARD_SIZE; i++)
+    {
+        int tmp = sudokuBoard[ target/BOARD_SIZE + i ];
+        if (tmp > 0)
+        {
+            appeardInColumn[ tmp - 1 ]++;
+        }
+    }
+
+    for(int i = 0; i < BOARD_SIZE; i++)
+    {
+        printf("%d", appeardInRow[i]);
+    }
+    printf(" - Appeared in row; Target - %d\n", target);
+
+    for(int i = 0; i < BOARD_SIZE; i++)
+    {
+        printf("%d", appeardInColumn[i]);
+    }
+    printf(" - Appeared in column; Target - %d\n", target);
+    
 
 }
+
+
 
 int main()
 {
@@ -98,14 +125,14 @@ int main()
         goto Error;
     }
 
-    fillEmpty<<<1, 1>>>(sudokuBoard, targetCell);
+    fillEmpty<<<1, indx>>>(sudokuBoard, targetCell);
 
     cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
         goto Error;
     }
-    
+
     // cudaDeviceSynchronize waits for the kernel to finish, and returns
     // any errors encountered during the launch.
     cudaStatus = cudaDeviceSynchronize();
@@ -116,6 +143,6 @@ int main()
 
 Error:
     cudaFree(sudokuBoard);
-    
+
     return cudaStatus;
 }
