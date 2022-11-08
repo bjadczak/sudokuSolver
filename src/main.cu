@@ -5,8 +5,8 @@
 #include <iostream>
 
 #define N 3
-#define BOARD_SIZE N*N
-#define CELL_COUNT BOARD_SIZE*BOARD_SIZE
+#define BOARD_SIZE (N*N)
+#define CELL_COUNT (BOARD_SIZE*BOARD_SIZE)
 
 #define DEBUG_MODE
 
@@ -24,13 +24,13 @@ __global__ void fillEmpty(int* sudokuBoard, int* targetCell)
     // Tables we use to count appearence
     int appeardInRow[BOARD_SIZE] = { 0 };
     int appeardInColumn[BOARD_SIZE] = { 0 };
-    // int appeardInBlock[BOARD_SIZE];
+    int appeardInBlock[BOARD_SIZE] = { 0 };
 
     int target = targetCell[threadIdx.x];
 
     for(int i = 0; i < BOARD_SIZE; i++)
     {
-        int tmp = sudokuBoard[ target%BOARD_SIZE + i ];
+        int tmp = sudokuBoard[ target%BOARD_SIZE + i * BOARD_SIZE ];
         if (tmp > 0)
         {
             appeardInRow[ tmp - 1 ]++;
@@ -46,18 +46,39 @@ __global__ void fillEmpty(int* sudokuBoard, int* targetCell)
         }
     }
 
-    for(int i = 0; i < BOARD_SIZE; i++)
+    int firstCellOfBlock = ((target/BOARD_SIZE)/N) * BOARD_SIZE * N + ((target % BOARD_SIZE) / N ) * N;
+    for(int i = 0; i < N; i++)
     {
-        printf("%d", appeardInRow[i]);
+        for(int j = 0; j < N; j++)
+        {
+            int tmp = sudokuBoard[firstCellOfBlock + i * BOARD_SIZE + j];
+            appeardInBlock[ tmp - 1 ]++;
+        }
     }
-    printf(" - Appeared in row; Target - %d\n", target);
 
-    for(int i = 0; i < BOARD_SIZE; i++)
-    {
-        printf("%d", appeardInColumn[i]);
-    }
-    printf(" - Appeared in column; Target - %d\n", target);
+    #ifdef DEBUG_MODE
+        for(int i = 0; i < BOARD_SIZE; i++)
+        {
+            printf("%d", appeardInRow[i]);
+        }
+        printf(" - Appeared in row; Target - %d\n", target);
+
+        for(int i = 0; i < BOARD_SIZE; i++)
+        {
+            printf("%d", appeardInColumn[i]);
+        }
+        printf(" - Appeared in column; Target - %d\n", target);
+
+        for(int i = 0; i < BOARD_SIZE; i++)
+        {
+            printf("%d", appeardInBlock[i]);
+        }
+        printf(" - Appeared in block; Target - %d\n", target);
+    #endif
     
+
+
+
 
 }
 
@@ -89,6 +110,7 @@ int main()
             empty_cells[indx] = i;
             indx++;
         }
+    
 
    int* sudokuBoard = 0;
    int* targetCell = 0;
