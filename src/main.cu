@@ -8,18 +8,39 @@
 #define BOARD_SIZE (N * N)
 #define CELL_COUNT (BOARD_SIZE * BOARD_SIZE)
 
-// #define DEBUG_MODE
+#define DEBUG_MODE
 
-__device__ void printBoard(int *sudokuBoard, int *targetCell, int id)
+__device__ void printBoard(int *sudokuBoard, int *targetCell, int id, int *appeardInRow, int *appeardInColumn, int *appeardInBlock)
 {
+
     printf("TARGET CELL - %d (id: %d)\n", targetCell[id], id);
+
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        printf("%d", appeardInRow[i]);
+    }
+    printf(" - Appeared in row; Target - %d\n", targetCell[id]);
+
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        printf("%d", appeardInColumn[i]);
+    }
+    printf(" - Appeared in column; Target - %d\n", targetCell[id]);
+
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        printf("%d", appeardInBlock[i]);
+    }
+    printf(" - Appeared in block; Target - %d\n", targetCell[id]);
 }
 
 __global__ void fillEmpty(int *sudokuBoard, int *targetCell)
 {
 #ifdef DEBUG_MODE
-    printBoard(sudokuBoard, targetCell, threadIdx.x);
+
 #endif
+
+    sudokuBoard += threadIdx.x * CELL_COUNT;
 
     // Tables we use to count appearence
     int appeardInRow[BOARD_SIZE] = {0};
@@ -63,24 +84,10 @@ __global__ void fillEmpty(int *sudokuBoard, int *targetCell)
         }
     }
 
+    __syncthreads();
+
 #ifdef DEBUG_MODE
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        printf("%d", appeardInRow[i]);
-    }
-    printf(" - Appeared in row; Target - %d\n", target);
-
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        printf("%d", appeardInColumn[i]);
-    }
-    printf(" - Appeared in column; Target - %d\n", target);
-
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        printf("%d", appeardInBlock[i]);
-    }
-    printf(" - Appeared in block; Target - %d\n", target);
+    printBoard(sudokuBoard, targetCell, threadIdx.x, appeardInRow, appeardInColumn, appeardInBlock);
 #endif
 }
 
@@ -194,7 +201,7 @@ int main()
     }
 
     // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void **)&sudokuBoard, CELL_COUNT * sizeof(int));
+    cudaStatus = cudaMalloc((void **)&sudokuBoard, CELL_COUNT * CELL_COUNT * sizeof(int));
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMalloc failed!");
@@ -207,12 +214,14 @@ int main()
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
-
-    cudaStatus = cudaMemcpy(sudokuBoard, start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess)
+    for (int i = 0; i < CELL_COUNT; i++)
     {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
+        cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+        if (cudaStatus != cudaSuccess)
+        {
+            fprintf(stderr, "cudaMemcpy failed!");
+            goto Error;
+        }
     }
 
     cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
