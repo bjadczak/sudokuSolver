@@ -49,6 +49,8 @@ __global__ void fillEmpty(int *sudokuBoard, int *targetCell)
 
     int target = targetCell[threadIdx.x];
 
+    // Calculate notes -- if it turns out there is only one possiblity - insert it
+
     for (int i = 0; i < BOARD_SIZE; i++)
     {
         int tmp = sudokuBoard[target / BOARD_SIZE + i];
@@ -84,16 +86,42 @@ __global__ void fillEmpty(int *sudokuBoard, int *targetCell)
         }
     }
 
-    __syncthreads();
+    // Check what notes we have
 
+    int number = -1;
+
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+
+        if ((appeardInRow[i] == 0 && appeardInColumn[i] == 0 && appeardInBlock[i] == 0) && number == -1)
+            number = i + 1;
+        else if ((appeardInRow[i] == 0 && appeardInColumn[i] == 0 && appeardInBlock[i] == 0) && number != -1)
+        {
+            number = -2;
+        }
+    }
 #ifdef DEBUG_MODE
-    printBoard(sudokuBoard, targetCell, threadIdx.x, appeardInRow, appeardInColumn, appeardInBlock);
+    printf("TARGET CELL - %d (id: %d); number: %d\n", target + 1, threadIdx.x, number);
 #endif
+    __syncthreads();
 }
 
 int main()
 {
     cudaError_t cudaStatus;
+
+    // const int start_board[CELL_COUNT] =
+    //     {
+    //         3, 0, 0, 8, 0, 1, 0, 0, 2,
+    //         2, 0, 1, 0, 3, 0, 6, 0, 4,
+    //         0, 0, 0, 0, 1, 0, 0, 0, 0,
+    //         8, 0, 9, 0, 0, 0, 1, 0, 6,
+    //         0, 6, 0, 0, 0, 0, 0, 5, 0,
+    //         7, 0, 2, 0, 0, 0, 4, 0, 9,
+    //         0, 0, 0, 5, 0, 9, 0, 0, 0,
+    //         9, 0, 4, 0, 8, 0, 7, 0, 5,
+    //         6, 0, 0, 0, 0, 7, 0, 0, 3,
+    //     };
 
     const int start_board[CELL_COUNT] =
         {
@@ -179,6 +207,7 @@ int main()
             0,
             3,
         };
+
     int empty_cells[CELL_COUNT] = {-1};
 
     int indx = 0;
