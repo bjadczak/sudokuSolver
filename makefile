@@ -6,7 +6,7 @@ INCLUDE := -I./src
 LIBPATH :=
 LIBS :=
 
-FLAGS :=
+FLAGS := -std=c++11
 CXXFLAGS := $(FLAGS)
 
 CXX := nvcc
@@ -22,3 +22,4 @@ $(OBJ_FILES): $(SRC_FILES)
 .PHONY: clean
 clean:
 	rm $(TARGET)
+	rm -rf obj
