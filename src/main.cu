@@ -12,7 +12,7 @@
 
 struct appeared
 {
-    int cell;
+    int cell = -1;
 
     int appeardInRow[BOARD_SIZE] = {0};
     int appeardInColumn[BOARD_SIZE] = {0};
@@ -54,7 +54,6 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
 #endif
 
     sudokuBoard += threadIdx.x * CELL_COUNT;
-    // app += threadIdx.x * sizeof(appeared);
     app[threadIdx.x].cell = targetCell[threadIdx.x];
 
     // Calculate notes -- if it turns out there is only one possiblity - insert it
@@ -66,7 +65,6 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
         {
             app[threadIdx.x].appeardInRow[tmp - 1]++;
         }
-        // printf("ROW - cell: %d is %d\n", app.cell / BOARD_SIZE + i, tmp);
     }
 
     for (int i = 0; i < BOARD_SIZE; i++)
@@ -77,7 +75,6 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
         {
             app[threadIdx.x].appeardInColumn[tmp - 1]++;
         }
-        // printf("COLUMN - cell: %d is %d\n", app->cell % BOARD_SIZE + i * BOARD_SIZE, tmp);
     }
 
     int firstCellOfBlock = ((app[threadIdx.x].cell / BOARD_SIZE) / N) * BOARD_SIZE * N + ((app[threadIdx.x].cell % BOARD_SIZE) / N) * N;
@@ -90,27 +87,17 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
             {
                 app[threadIdx.x].appeardInBlock[tmp - 1]++;
             }
-            // printf("BLOCK - cell: %d is %d\n", firstCellOfBlock + i * BOARD_SIZE + j, tmp);
         }
     }
-
+#ifdef DEBUG_MODE
     // Check what notes we have
 
-    int number = -1;
     int numOfZerosRow = 0;
     int numOfZerosColumn = 0;
     int numOfZerosBlock = 0;
 
     for (int i = 0; i < BOARD_SIZE; i++)
     {
-
-        // if ((appeardInRow[i] == 0 && appeardInColumn[i] == 0 && appeardInBlock[i] == 0) && number == -1)
-        //     number = i + 1;
-        // else if ((appeardInRow[i] == 0 && appeardInColumn[i] == 0 && appeardInBlock[i] == 0) && number != -1)
-        //{
-        //     number = -2;
-        // }
-
         if (app[threadIdx.x].appeardInRow[i] == 0)
             numOfZerosRow++;
         if (app[threadIdx.x].appeardInColumn[i] == 0)
@@ -118,9 +105,8 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
         if (app[threadIdx.x].appeardInBlock[i] == 0)
             numOfZerosBlock++;
     }
-#ifdef DEBUG_MODE
-    printf("TARGET CELL - %d (id: %d); number of zeros row: %d; column: %d; block: %d\n", app->cell + 1, threadIdx.x, numOfZerosRow, numOfZerosColumn, numOfZerosBlock);
-    // printf("TARGET CELL - %d (id: %d); number: %d\n", target + 1, threadIdx.x, number);
+
+    printf("TARGET CELL - %d (id: %d); number of zeros row: %d; column: %d; block: %d\n", app[threadIdx.x].cell + 1, threadIdx.x, numOfZerosRow, numOfZerosColumn, numOfZerosBlock);
 #endif
     __syncthreads();
 }
@@ -313,8 +299,9 @@ int main()
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
-
+#ifdef DEBUG_MODE
     printBoard(calculated);
+#endif
 
 Error:
     cudaFree(sudokuBoard);

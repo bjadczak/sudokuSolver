@@ -22,4 +22,3 @@ $(OBJ_FILES): $(SRC_FILES)
 .PHONY: clean
 clean:
 	rm $(TARGET)
-	rm -rf obj
