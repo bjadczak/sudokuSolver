@@ -24,7 +24,7 @@ struct appeared
 
 __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app);
 
-__host__ void printBoard(appeared *app)
+__host__ void printBoardInfo(appeared *app)
 {
     for (int i = 0; i < CELL_COUNT; i++)
     {
@@ -50,10 +50,24 @@ __host__ void printBoard(appeared *app)
         printf(" - Appeared in block\n");
     }
 }
+__host__ void printBoard(int *sudokuBoard)
+{
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            printf("%d ", sudokuBoard[i * BOARD_SIZE + j]);
+        }
+        printf("\n");
+    }
+}
 
-__host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, cudaError_t &cudaStatus)
+__host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, const int *start_board, cudaError_t &cudaStatus)
 {
     std::queue<int[CELL_COUNT]> Q;
+    int currentBoard[CELL_COUNT] = {0};
+    for (int i = 0; i < CELL_COUNT; i++)
+        currentBoard[i] = start_board[i];
 
     // Calucate notes
     fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
@@ -83,6 +97,8 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
     int optionsWithI = -1;
     int emptyInAll[CELL_COUNT][BOARD_SIZE] = {0};
 
+    int sureChanges = 0;
+
     for (int i = 0; i < indx; i++)
     {
         int tmp = 0;
@@ -97,10 +113,14 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
             }
         }
 
-        if (iWithLeastOptions < 0 || optionsWithI > tmp)
+        if (tmp != 1 && (iWithLeastOptions < 0 || optionsWithI > tmp))
         {
             iWithLeastOptions = i;
             optionsWithI = tmp;
+        }
+        else if (tmp == 1)
+        {
+            sureChanges++;
         }
 #ifdef DEBUG_MODE
         printf("[%02d] Cell: %2d; Possible to input: ", i, calculated[i].cell);
@@ -113,10 +133,10 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
 #endif
     }
 
-    printf("Least options: %d; For cell: %d\n", optionsWithI, calculated[iWithLeastOptions].cell);
+    printf("Least options: %d; For cell: %d; Number of sure changes: %d\n", optionsWithI, calculated[iWithLeastOptions].cell, sureChanges);
 
 #ifdef DEBUG_MODE
-    printBoard(calculated);
+    printBoard(currentBoard);
 #endif
 }
 
@@ -244,7 +264,7 @@ __host__ int solveSudoku(const int *start_board, int *sudokuBoard, int *targetCe
         goto Error;
     }
 
-    solve(indx, sudokuBoard, targetCell, app, calculated, cudaStatus);
+    solve(indx, sudokuBoard, targetCell, app, calculated, start_board, cudaStatus);
 
 Error:
     cudaFree(sudokuBoard);
