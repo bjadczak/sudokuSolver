@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <iostream>
 
+#include <queue>
+
 #define N 3
 #define BOARD_SIZE (N * N)
 #define CELL_COUNT (BOARD_SIZE * BOARD_SIZE)
@@ -19,6 +21,8 @@ struct appeared
     int appeardInBlock[BOARD_SIZE] = {0};
 
 } typedef appeared;
+
+__global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app);
 
 __host__ void printBoard(appeared *app)
 {
@@ -47,11 +51,77 @@ __host__ void printBoard(appeared *app)
     }
 }
 
+__host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, cudaError_t &cudaStatus)
+{
+    std::queue<int[CELL_COUNT]> Q;
+
+    // Calucate notes
+    fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
+
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+    }
+
+    // cudaDeviceSynchronize waits for the kernel to finish, and returns
+    // any errors encountered during the launch.
+    cudaStatus = cudaDeviceSynchronize();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+    }
+    cudaStatus = cudaMemcpy(calculated, app, CELL_COUNT * sizeof(appeared), cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+    // Check notes, where we have posibility to enter something in cell
+
+    int iWithLeastOptions = -1;
+    int optionsWithI = -1;
+    int emptyInAll[CELL_COUNT][BOARD_SIZE] = {0};
+
+    for (int i = 0; i < indx; i++)
+    {
+        int tmp = 0;
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            if (calculated[i].appeardInBlock[j] == 0 &&
+                calculated[i].appeardInColumn[j] == 0 &&
+                calculated[i].appeardInRow[j] == 0)
+            {
+                emptyInAll[i][j] = 1;
+                tmp++;
+            }
+        }
+
+        if (iWithLeastOptions < 0 || optionsWithI > tmp)
+        {
+            iWithLeastOptions = i;
+            optionsWithI = tmp;
+        }
+#ifdef DEBUG_MODE
+        printf("[%02d] Cell: %2d; Possible to input: ", i, calculated[i].cell);
+
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            printf("%d ", emptyInAll[i][j]);
+        }
+        printf("\n");
+#endif
+    }
+
+    printf("Least options: %d; For cell: %d\n", optionsWithI, calculated[iWithLeastOptions].cell);
+
+#ifdef DEBUG_MODE
+    printBoard(calculated);
+#endif
+}
+
 __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app)
 {
-#ifdef DEBUG_MODE
-
-#endif
 
     sudokuBoard += threadIdx.x * CELL_COUNT;
     app[threadIdx.x].cell = targetCell[threadIdx.x];
@@ -111,9 +181,81 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
     __syncthreads();
 }
 
-int main()
+__host__ int solveSudoku(const int *start_board, int *sudokuBoard, int *targetCell, appeared *app)
 {
     cudaError_t cudaStatus;
+
+    int empty_cells[CELL_COUNT] = {-1};
+
+    int indx = 0;
+    for (int i = 0; i < CELL_COUNT; i++)
+        if (start_board[i] == 0)
+        {
+            empty_cells[indx] = i;
+            indx++;
+        }
+
+    appeared calculated[CELL_COUNT];
+
+    // Choose which GPU to run on, change this on a multi-GPU system.
+    cudaStatus = cudaSetDevice(0);
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+        goto Error;
+    }
+
+    // Allocate GPU buffers for three vectors (two input, one output)    .
+    cudaStatus = cudaMalloc((void **)&sudokuBoard, CELL_COUNT * CELL_COUNT * sizeof(int));
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMalloc failed!");
+        goto Error;
+    }
+
+    cudaStatus = cudaMalloc((void **)&targetCell, CELL_COUNT * sizeof(int));
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMalloc failed!");
+        goto Error;
+    }
+
+    cudaStatus = cudaMalloc((void **)&app, CELL_COUNT * sizeof(appeared));
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMalloc failed!");
+        goto Error;
+    }
+
+    for (int i = 0; i < CELL_COUNT; i++)
+    {
+        cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+        if (cudaStatus != cudaSuccess)
+        {
+            fprintf(stderr, "cudaMemcpy failed!");
+            goto Error;
+        }
+    }
+
+    cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMemcpy failed!");
+        goto Error;
+    }
+
+    solve(indx, sudokuBoard, targetCell, app, calculated, cudaStatus);
+
+Error:
+    cudaFree(sudokuBoard);
+    cudaFree(targetCell);
+    cudaFree(app);
+
+    return cudaStatus;
+}
+
+int main()
+{
 
     // const int start_board[CELL_COUNT] =
     //     {
@@ -213,100 +355,9 @@ int main()
             3,
         };
 
-    int empty_cells[CELL_COUNT] = {-1};
-
-    int indx = 0;
-    for (int i = 0; i < CELL_COUNT; i++)
-        if (start_board[i] == 0)
-        {
-            empty_cells[indx] = i;
-            indx++;
-        }
-
     int *sudokuBoard = 0;
     int *targetCell = 0;
     appeared *app = 0;
 
-    appeared calculated[CELL_COUNT];
-
-    // Choose which GPU to run on, change this on a multi-GPU system.
-    cudaStatus = cudaSetDevice(0);
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-        goto Error;
-    }
-
-    // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void **)&sudokuBoard, CELL_COUNT * CELL_COUNT * sizeof(int));
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    cudaStatus = cudaMalloc((void **)&targetCell, CELL_COUNT * sizeof(int));
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    cudaStatus = cudaMalloc((void **)&app, CELL_COUNT * sizeof(appeared));
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    for (int i = 0; i < CELL_COUNT; i++)
-    {
-        cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-        if (cudaStatus != cudaSuccess)
-        {
-            fprintf(stderr, "cudaMemcpy failed!");
-            goto Error;
-        }
-    }
-
-    cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-
-    fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
-
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        goto Error;
-    }
-
-    // cudaDeviceSynchronize waits for the kernel to finish, and returns
-    // any errors encountered during the launch.
-    cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-        goto Error;
-    }
-    cudaStatus = cudaMemcpy(calculated, app, CELL_COUNT * sizeof(appeared), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-#ifdef DEBUG_MODE
-    printBoard(calculated);
-#endif
-
-Error:
-    cudaFree(sudokuBoard);
-    cudaFree(targetCell);
-    cudaFree(app);
-
-    return cudaStatus;
+    return solveSudoku((int *)start_board, sudokuBoard, targetCell, app);
 }
