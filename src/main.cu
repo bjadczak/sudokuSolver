@@ -61,6 +61,58 @@ __host__ void printBoard(int *sudokuBoard)
         printf("\n");
     }
 }
+__host__ bool isBoardValid(int *sudokuBoard)
+{
+    for (int i = 0; i < BOARD_SIZE; i++)
+        {
+            int all[BOARD_SIZE] = {0};
+            for (int j = 0; j < BOARD_SIZE; j++)
+            {
+                if (sudokuBoard[i*BOARD_SIZE + j] > 0)
+                    all[sudokuBoard[i*BOARD_SIZE + j] - 1]++;
+            }
+            for (int j = 0; j < BOARD_SIZE; j++)
+                if (all[j] > 1)
+                    return false;
+        }
+        printf("Board with valid rows\n");
+        for (int i = 0; i < BOARD_SIZE; i++)
+        {
+            int all[BOARD_SIZE] = {0};
+            for (int j = 0; j < BOARD_SIZE; j++)
+            {
+                if (sudokuBoard[j*BOARD_SIZE + i] > 0)
+                    all[sudokuBoard[j*BOARD_SIZE + i] - 1]++;
+            }
+            for (int j = 0; j < BOARD_SIZE; j++)
+                if (all[j] > 1)
+                    return false;
+        }
+        printf("Board with valid columns\n");
+        for (int i = 0; i < N; i++)
+        {
+            for (int j = 0; j < N; j++)
+            {
+                int all[BOARD_SIZE] = {0};
+                for (int x = i * N; x < (i + 1) * N; x++)
+                {
+                    for (int y = j * N; y < (j + 1) * N; y++)
+                    {
+                        if (sudokuBoard[x*BOARD_SIZE + y] > 0)
+                    all[sudokuBoard[x*BOARD_SIZE + y] - 1]++;
+                    }
+                }
+                for (int k = 0; k < BOARD_SIZE; k++)
+                    if (all[k] > 1)
+                    {
+                        printf("Invalid block %d:%d\n", i, j);
+                        return false;
+                    }
+            }
+        }
+        printf("Board with valid blocks\n");
+        return true;
+}
 
 __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, const int *start_board, cudaError_t &cudaStatus)
 {
@@ -69,118 +121,110 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
     int empty_cells[CELL_COUNT] = {-1};
     for (int i = 0; i < CELL_COUNT; i++)
         currentBoard[i] = start_board[i];
-
-    // Calucate notes
-    fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
-
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess)
+    for (int k = 0; k < 10; k++)
     {
-        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-    }
+        // Calucate notes
+        fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
 
-    // cudaDeviceSynchronize waits for the kernel to finish, and returns
-    // any errors encountered during the launch.
-    cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-    }
-    cudaStatus = cudaMemcpy(calculated, app, CELL_COUNT * sizeof(appeared), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMemcpy failed!");
-    }
+        cudaStatus = cudaGetLastError();
+        if (cudaStatus != cudaSuccess)
+        {
+            fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        }
 
-    // Check notes, where we have posibility to enter something in cell
+        // cudaDeviceSynchronize waits for the kernel to finish, and returns
+        // any errors encountered during the launch.
+        cudaStatus = cudaDeviceSynchronize();
+        if (cudaStatus != cudaSuccess)
+        {
+            fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+        }
+        cudaStatus = cudaMemcpy(calculated, app, CELL_COUNT * sizeof(appeared), cudaMemcpyDeviceToHost);
+        if (cudaStatus != cudaSuccess)
+        {
+            fprintf(stderr, "cudaMemcpy failed!");
+        }
+
+        // Check notes, where we have posibility to enter something in cell
 
 #ifdef DEBUG_MODE
-    printf("Current board:\n");
-    printBoard(currentBoard);
+        printf("Current board is "); printf((isBoardValid(currentBoard) ? "valid" : "invalid")); printf(":\n");
+        printBoard(currentBoard);
+        printBoardInfo(calculated);
 #endif
 
-    int iWithLeastOptions = -1;
-    int optionsWithI = -1;
-    int emptyInAll[CELL_COUNT][BOARD_SIZE] = {0};
+        int iWithLeastOptions = -1;
+        int optionsWithI = -1;
+        int emptyInAll[CELL_COUNT][BOARD_SIZE] = {0};
 
-    int sureChanges = 0;
+        int sureChanges = 0;
 
-    for (int i = 0; i < indx; i++)
-    {
-        int tmp = 0;
-        for (int j = 0; j < BOARD_SIZE; j++)
+        for (int i = 0; i < indx; i++)
         {
-            if (calculated[i].appeardInBlock[j] == 0 &&
-                calculated[i].appeardInColumn[j] == 0 &&
-                calculated[i].appeardInRow[j] == 0)
-            {
-                emptyInAll[i][j] = 1;
-                tmp++;
-            }
-        }
-
-        if (tmp != 1 && (iWithLeastOptions < 0 || optionsWithI > tmp))
-        {
-            iWithLeastOptions = i;
-            optionsWithI = tmp;
-        }
-        else if (tmp == 1)
-        {
-            sureChanges++;
+            int tmp = 0;
             for (int j = 0; j < BOARD_SIZE; j++)
             {
-                if (emptyInAll[i][j] == 1)
+                if (calculated[i].appeardInBlock[j] == 0 &&
+                    calculated[i].appeardInColumn[j] == 0 &&
+                    calculated[i].appeardInRow[j] == 0)
                 {
-                    currentBoard[calculated[i].cell] = j + 1;
-                    break;
+                    emptyInAll[i][j] = 1;
+                    tmp++;
                 }
             }
-        }
-#ifdef DEBUG_MODE
-        printf("[%02d] Cell: %2d; Possible to input: ", i, calculated[i].cell);
 
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            printf("%d ", emptyInAll[i][j]);
-        }
-        printf("\n");
+            if (iWithLeastOptions < 0 || optionsWithI > tmp)
+            {
+                iWithLeastOptions = i;
+                optionsWithI = tmp;
+            }
+#ifdef DEBUG_MODE
+            // printf("[%02d] Cell: %2d; Possible to input: ", i, calculated[i].cell);
+
+            // for (int j = 0; j < BOARD_SIZE; j++)
+            //{
+            //     printf("%d ", emptyInAll[i][j]);
+            // }
+            // printf("\n");
 #endif
-    }
+        }
 
-    printf("Least options: %d; For cell: %d; Number of sure changes: %d\n", optionsWithI, calculated[iWithLeastOptions].cell, sureChanges);
+        printf("Least options: %d; For cell: %d\n", optionsWithI, calculated[iWithLeastOptions].cell);
+        for (int i = 0; i < BOARD_SIZE; i++)
+            if (emptyInAll[iWithLeastOptions][i] == 1)
+            {
+                currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
+                break;
+            }
 
 #ifdef DEBUG_MODE
-    if (sureChanges > 0)
-    {
-        printf("Board with sure changes:\n");
+        printf("Board with changes is "); printf((isBoardValid(currentBoard) ? "valid" : "invalid")); printf(":\n");
         printBoard(currentBoard);
-    }
 #endif
 
-    for (int i = 0; i < CELL_COUNT; i++)
-    {
-        cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), currentBoard, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+        for (int i = 0; i < CELL_COUNT; i++)
+        {
+            cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), currentBoard, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+            if (cudaStatus != cudaSuccess)
+            {
+                fprintf(stderr, "cudaMemcpy failed!");
+            }
+        }
+
+        indx = 0;
+        for (int i = 0; i < CELL_COUNT; i++)
+            if (currentBoard[i] == 0)
+            {
+                empty_cells[indx] = i;
+                indx++;
+            }
+
+        cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
         if (cudaStatus != cudaSuccess)
         {
             fprintf(stderr, "cudaMemcpy failed!");
         }
     }
-
-    indx = 0;
-    for (int i = 0; i < CELL_COUNT; i++)
-        if (currentBoard[i] == 0)
-        {
-            empty_cells[indx] = i;
-            indx++;
-        }
-
-    cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMemcpy failed!");
-    }
-
-    fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
 }
 
 __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app)
@@ -327,7 +371,7 @@ int main()
 
     // const int start_board[CELL_COUNT] =
     //     {
-    //         3, 0, 0, 8, 0, 1, 0, 0, 2,
+    //         3, 0, 0, 8, 0, 0, 0, 0, 2,
     //         2, 0, 1, 0, 3, 0, 6, 0, 4,
     //         0, 0, 0, 0, 1, 0, 0, 0, 0,
     //         8, 0, 9, 0, 0, 0, 1, 0, 6,
@@ -345,7 +389,7 @@ int main()
             0,
             8,
             0,
-            1,
+            0,
             0,
             0,
             2,
