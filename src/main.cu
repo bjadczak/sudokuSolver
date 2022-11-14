@@ -66,6 +66,7 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
 {
     std::queue<int[CELL_COUNT]> Q;
     int currentBoard[CELL_COUNT] = {0};
+    int empty_cells[CELL_COUNT] = {-1};
     for (int i = 0; i < CELL_COUNT; i++)
         currentBoard[i] = start_board[i];
 
@@ -155,6 +156,31 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
         printBoard(currentBoard);
     }
 #endif
+
+    for (int i = 0; i < CELL_COUNT; i++)
+    {
+        cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), currentBoard, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+        if (cudaStatus != cudaSuccess)
+        {
+            fprintf(stderr, "cudaMemcpy failed!");
+        }
+    }
+
+    indx = 0;
+    for (int i = 0; i < CELL_COUNT; i++)
+        if (currentBoard[i] == 0)
+        {
+            empty_cells[indx] = i;
+            indx++;
+        }
+
+    cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMemcpy failed!");
+    }
+
+    fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
 }
 
 __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app)
@@ -162,6 +188,11 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
 
     sudokuBoard += threadIdx.x * CELL_COUNT;
     app[threadIdx.x].cell = targetCell[threadIdx.x];
+
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        app[threadIdx.x].appeardInBlock[i] = app[threadIdx.x].appeardInColumn[i] = app[threadIdx.x].appeardInRow[i] = 0;
+    }
 
     // Calculate notes -- if it turns out there is only one possiblity - insert it
 
