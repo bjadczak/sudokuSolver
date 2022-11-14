@@ -93,6 +93,11 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
 
     // Check notes, where we have posibility to enter something in cell
 
+#ifdef DEBUG_MODE
+    printf("Current board:\n");
+    printBoard(currentBoard);
+#endif
+
     int iWithLeastOptions = -1;
     int optionsWithI = -1;
     int emptyInAll[CELL_COUNT][BOARD_SIZE] = {0};
@@ -121,6 +126,14 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
         else if (tmp == 1)
         {
             sureChanges++;
+            for (int j = 0; j < BOARD_SIZE; j++)
+            {
+                if (emptyInAll[i][j] == 1)
+                {
+                    currentBoard[calculated[i].cell] = j + 1;
+                    break;
+                }
+            }
         }
 #ifdef DEBUG_MODE
         printf("[%02d] Cell: %2d; Possible to input: ", i, calculated[i].cell);
@@ -136,7 +149,11 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
     printf("Least options: %d; For cell: %d; Number of sure changes: %d\n", optionsWithI, calculated[iWithLeastOptions].cell, sureChanges);
 
 #ifdef DEBUG_MODE
-    printBoard(currentBoard);
+    if (sureChanges > 0)
+    {
+        printf("Board with sure changes:\n");
+        printBoard(currentBoard);
+    }
 #endif
 }
 
