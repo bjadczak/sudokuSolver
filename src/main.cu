@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <iostream>
 
-#include <queue>
+#include <stack>
 
 #define N 3
 #define BOARD_SIZE (N * N)
@@ -27,8 +27,9 @@ struct move
     int board[CELL_COUNT] = {0};
     int cell = -1;
     int possibilites[BOARD_SIZE] = {0};
+    int moveMade = -1;
 
-    move(int *currentBoard, int cell, int *possibilites)
+    move(int *currentBoard, int cell, int *possibilites, int move)
     {
         for (int i = 0; i < CELL_COUNT; i++)
             this->board[i] = currentBoard[i];
@@ -37,6 +38,7 @@ struct move
             this->possibilites[i] = possibilites[i];
 
         this->cell = cell;
+        this->moveMade = move;
     }
 } typedef move;
 
@@ -91,7 +93,7 @@ __host__ bool isBoardValid(int *sudokuBoard)
                 all[sudokuBoard[i * BOARD_SIZE + j] - 1]++;
         }
         for (int j = 0; j < BOARD_SIZE; j++)
-            if (all[j] > 1)
+            if (all[j] != 1)
                 return false;
     }
     for (int i = 0; i < BOARD_SIZE; i++)
@@ -103,7 +105,7 @@ __host__ bool isBoardValid(int *sudokuBoard)
                 all[sudokuBoard[j * BOARD_SIZE + i] - 1]++;
         }
         for (int j = 0; j < BOARD_SIZE; j++)
-            if (all[j] > 1)
+            if (all[j] != 1)
                 return false;
     }
     for (int i = 0; i < N; i++)
@@ -120,7 +122,7 @@ __host__ bool isBoardValid(int *sudokuBoard)
                 }
             }
             for (int k = 0; k < BOARD_SIZE; k++)
-                if (all[k] > 1)
+                if (all[k] != 1)
                 {
                     return false;
                 }
@@ -131,13 +133,13 @@ __host__ bool isBoardValid(int *sudokuBoard)
 
 __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, const int *start_board, cudaError_t &cudaStatus)
 {
-    std::queue<move> Q;
+    std::stack<move> S;
 
     int currentBoard[CELL_COUNT] = {0};
     int empty_cells[CELL_COUNT] = {-1};
     for (int i = 0; i < CELL_COUNT; i++)
         currentBoard[i] = start_board[i];
-    for (int k = 0; k < 40; k++)
+    while (!isBoardValid(currentBoard))
     {
         // Calucate notes
         fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
@@ -204,22 +206,67 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
             for (int i = 0; i < BOARD_SIZE; i++)
                 if (emptyInAll[iWithLeastOptions][i] == 1)
                 {
-                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions]);
+                    emptyInAll[iWithLeastOptions][i] = 0;
+                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions], i);
                     currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
+                    S.push(m);
                     break;
                 }
         }
         else if (optionsWithI > 1)
         {
-            printf("Possibilities are: ");
+            // Input random number and check if board is valid
             for (int i = 0; i < BOARD_SIZE; i++)
             {
                 if (emptyInAll[iWithLeastOptions][i] == 1)
                 {
-                    printf("%d ", i + 1);
+                    emptyInAll[iWithLeastOptions][i] = 0;
+                    currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
+                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions], i);
+                    S.push(m);
+                    break;
                 }
             }
-            printf("for empty space\n");
+        }
+        else if (!isBoardValid(currentBoard))
+        {
+            // Board is broken, we need to back up
+            printf("We are backing up\n");
+            bool foundMove = false;
+            while (!S.empty() && !foundMove)
+            {
+                move m = S.top();
+                S.pop();
+                int numOfPossibilites = 0;
+                for (int i = 0; i < BOARD_SIZE; i++)
+                    numOfPossibilites += m.possibilites[i];
+
+                // We do not have an option to diverge from this state
+                if (numOfPossibilites == 0)
+                {
+                    printf("Move with no options\n");
+                    continue;
+                }
+
+                for (int i = 0; i < BOARD_SIZE; i++)
+                {
+                    if (m.possibilites[i] == 1)
+                    {
+                        // We have a possiblitie to diverge
+                        m.possibilites[i] = 0;
+                        m.moveMade = i;
+                        for (int j = 0; j < CELL_COUNT; j++)
+                            currentBoard[j] = m.board[j];
+                        currentBoard[m.cell] = i + 1;
+                        S.push(m);
+                        printf("Move with   options - cell: %d set to: %d\n", m.cell, i + 1);
+                        foundMove = true;
+                        break;
+                    }
+                }
+            }
+            if (S.empty())
+                return;
         }
 
         // Prepear next step
@@ -380,100 +427,112 @@ int main()
 
     // const int start_board[CELL_COUNT] =
     //     {
-    //         3, 0, 0, 8, 0, 0, 0, 0, 2,
-    //         2, 0, 1, 0, 3, 0, 6, 0, 4,
-    //         0, 0, 0, 0, 1, 0, 0, 0, 0,
-    //         8, 0, 9, 0, 0, 0, 1, 0, 6,
-    //         0, 6, 0, 0, 0, 0, 0, 5, 0,
-    //         7, 0, 2, 0, 0, 0, 4, 0, 9,
-    //         0, 0, 0, 5, 0, 9, 0, 0, 0,
-    //         9, 0, 4, 0, 8, 0, 7, 0, 5,
-    //         6, 0, 0, 0, 0, 7, 0, 0, 3,
+    //         3, 8, 6, 0, 0, 4, 7, 0, 0,
+    //         0, 0, 9, 0, 0, 0, 2, 0, 0,
+    //         0, 2, 0, 1, 0, 3, 8, 0, 5,
+    //         0, 7, 8, 0, 3, 0, 6, 2, 0,
+    //         0, 5, 2, 0, 0, 1, 0, 0, 4,
+    //         9, 4, 0, 2, 7, 0, 0, 0, 0,
+    //         2, 3, 0, 7, 4, 9, 5, 8, 6,
+    //         8, 0, 0, 0, 1, 0, 4, 0, 0,
+    //         4, 0, 0, 0, 0, 0, 0, 0, 2,
+    //     };
+    // const int start_board[CELL_COUNT] =
+    //     {
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
     //     };
 
     const int start_board[CELL_COUNT] =
         {
             3,
-            0,
-            0,
             8,
+            6,
             0,
+            0,
+            4,
+            7,
+            0,
+            0,
+            0,
+            0,
+            9,
             0,
             0,
             0,
             2,
+            0,
+            0,
+            0,
             2,
             0,
             1,
             0,
             3,
-            0,
-            6,
-            0,
-            4,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
             8,
-            0,
-            9,
-            0,
-            0,
-            0,
-            1,
-            0,
-            6,
-            0,
-            6,
-            0,
-            0,
-            0,
-            0,
             0,
             5,
             0,
             7,
+            8,
             0,
+            3,
+            0,
+            6,
             2,
             0,
             0,
-            0,
-            4,
-            0,
-            9,
-            0,
-            0,
-            0,
             5,
-            0,
-            9,
-            0,
+            2,
             0,
             0,
-            9,
+            1,
+            0,
             0,
             4,
+            9,
+            4,
             0,
+            2,
+            7,
+            0,
+            0,
+            0,
+            0,
+            2,
+            3,
+            0,
+            7,
+            4,
+            9,
+            5,
+            8,
+            6,
             8,
             0,
-            7,
-            0,
-            5,
-            6,
             0,
             0,
+            1,
+            0,
+            4,
             0,
             0,
-            7,
+            4,
             0,
             0,
-            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
         };
 
     int *sudokuBoard = 0;
