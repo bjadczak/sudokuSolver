@@ -10,7 +10,7 @@
 #define BOARD_SIZE (N * N)
 #define CELL_COUNT (BOARD_SIZE * BOARD_SIZE)
 
-#define DEBUG_MODE
+// #define DEBUG_MODE
 
 struct appeared
 {
@@ -27,9 +27,8 @@ struct move
     int board[CELL_COUNT] = {0};
     int cell = -1;
     int possibilites[BOARD_SIZE] = {0};
-    int moveMade = -1;
 
-    move(int *currentBoard, int cell, int *possibilites, int move)
+    move(int *currentBoard, int cell, int *possibilites)
     {
         for (int i = 0; i < CELL_COUNT; i++)
             this->board[i] = currentBoard[i];
@@ -38,7 +37,6 @@ struct move
             this->possibilites[i] = possibilites[i];
 
         this->cell = cell;
-        this->moveMade = move;
     }
 } typedef move;
 
@@ -139,6 +137,8 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
     int empty_cells[CELL_COUNT] = {-1};
     for (int i = 0; i < CELL_COUNT; i++)
         currentBoard[i] = start_board[i];
+
+    printBoard(currentBoard);
     while (!isBoardValid(currentBoard))
     {
         // Calucate notes
@@ -198,16 +198,17 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
             }
         }
 
-        // Do move
-
+// Do move
+#ifdef DEBUG_MODE
         printf("Least options: %d; For cell: %d\n", optionsWithI, calculated[iWithLeastOptions].cell);
+#endif
         if (optionsWithI == 1)
         {
             for (int i = 0; i < BOARD_SIZE; i++)
                 if (emptyInAll[iWithLeastOptions][i] == 1)
                 {
                     emptyInAll[iWithLeastOptions][i] = 0;
-                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions], i);
+                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions]);
                     currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
                     S.push(m);
                     break;
@@ -222,7 +223,7 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
                 {
                     emptyInAll[iWithLeastOptions][i] = 0;
                     currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
-                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions], i);
+                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions]);
                     S.push(m);
                     break;
                 }
@@ -230,8 +231,10 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
         }
         else if (!isBoardValid(currentBoard))
         {
-            // Board is broken, we need to back up
+// Board is broken, we need to back up
+#ifdef DEBUG_MODE
             printf("We are backing up\n");
+#endif
             bool foundMove = false;
             while (!S.empty() && !foundMove)
             {
@@ -244,7 +247,9 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
                 // We do not have an option to diverge from this state
                 if (numOfPossibilites == 0)
                 {
+#ifdef DEBUG_MODE
                     printf("Move with no options\n");
+#endif
                     continue;
                 }
 
@@ -254,19 +259,23 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
                     {
                         // We have a possiblitie to diverge
                         m.possibilites[i] = 0;
-                        m.moveMade = i;
                         for (int j = 0; j < CELL_COUNT; j++)
                             currentBoard[j] = m.board[j];
                         currentBoard[m.cell] = i + 1;
                         S.push(m);
+#ifdef DEBUG_MODE
                         printf("Move with   options - cell: %d set to: %d\n", m.cell, i + 1);
+#endif
                         foundMove = true;
                         break;
                     }
                 }
             }
             if (S.empty())
+            {
+                printf("No solution :(\n");
                 return;
+            }
         }
 
         // Prepear next step
@@ -301,6 +310,8 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
             fprintf(stderr, "cudaMemcpy failed!");
         }
     }
+    printf("Solved!\n");
+    printBoard(currentBoard);
 }
 
 __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app)
