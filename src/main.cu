@@ -22,7 +22,26 @@ struct appeared
 
 } typedef appeared;
 
-__global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app);
+struct move
+{
+    int board[CELL_COUNT] = {0};
+    int cell = -1;
+    int possibilites[BOARD_SIZE] = {0};
+
+    move(int *currentBoard, int cell, int *possibilites)
+    {
+        for (int i = 0; i < CELL_COUNT; i++)
+            this->board[i] = currentBoard[i];
+
+        for (int i = 0; i < BOARD_SIZE; i++)
+            this->possibilites[i] = possibilites[i];
+
+        this->cell = cell;
+    }
+} typedef move;
+
+__global__ void
+fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app);
 
 __host__ void printBoardInfo(appeared *app)
 {
@@ -64,60 +83,61 @@ __host__ void printBoard(int *sudokuBoard)
 __host__ bool isBoardValid(int *sudokuBoard)
 {
     for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        int all[BOARD_SIZE] = {0};
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            if (sudokuBoard[i * BOARD_SIZE + j] > 0)
+                all[sudokuBoard[i * BOARD_SIZE + j] - 1]++;
+        }
+        for (int j = 0; j < BOARD_SIZE; j++)
+            if (all[j] > 1)
+                return false;
+    }
+    for (int i = 0; i < BOARD_SIZE; i++)
+    {
+        int all[BOARD_SIZE] = {0};
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            if (sudokuBoard[j * BOARD_SIZE + i] > 0)
+                all[sudokuBoard[j * BOARD_SIZE + i] - 1]++;
+        }
+        for (int j = 0; j < BOARD_SIZE; j++)
+            if (all[j] > 1)
+                return false;
+    }
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
         {
             int all[BOARD_SIZE] = {0};
-            for (int j = 0; j < BOARD_SIZE; j++)
+            for (int x = i * N; x < (i + 1) * N; x++)
             {
-                if (sudokuBoard[i*BOARD_SIZE + j] > 0)
-                    all[sudokuBoard[i*BOARD_SIZE + j] - 1]++;
-            }
-            for (int j = 0; j < BOARD_SIZE; j++)
-                if (all[j] > 1)
-                    return false;
-        }
-        for (int i = 0; i < BOARD_SIZE; i++)
-        {
-            int all[BOARD_SIZE] = {0};
-            for (int j = 0; j < BOARD_SIZE; j++)
-            {
-                if (sudokuBoard[j*BOARD_SIZE + i] > 0)
-                    all[sudokuBoard[j*BOARD_SIZE + i] - 1]++;
-            }
-            for (int j = 0; j < BOARD_SIZE; j++)
-                if (all[j] > 1)
-                    return false;
-        }
-        for (int i = 0; i < N; i++)
-        {
-            for (int j = 0; j < N; j++)
-            {
-                int all[BOARD_SIZE] = {0};
-                for (int x = i * N; x < (i + 1) * N; x++)
+                for (int y = j * N; y < (j + 1) * N; y++)
                 {
-                    for (int y = j * N; y < (j + 1) * N; y++)
-                    {
-                        if (sudokuBoard[x*BOARD_SIZE + y] > 0)
-                    all[sudokuBoard[x*BOARD_SIZE + y] - 1]++;
-                    }
+                    if (sudokuBoard[x * BOARD_SIZE + y] > 0)
+                        all[sudokuBoard[x * BOARD_SIZE + y] - 1]++;
                 }
-                for (int k = 0; k < BOARD_SIZE; k++)
-                    if (all[k] > 1)
-                    {
-                        return false;
-                    }
             }
+            for (int k = 0; k < BOARD_SIZE; k++)
+                if (all[k] > 1)
+                {
+                    return false;
+                }
         }
-        return true;
+    }
+    return true;
 }
 
 __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, const int *start_board, cudaError_t &cudaStatus)
 {
-    std::queue<int[CELL_COUNT]> Q;
+    std::queue<move> Q;
+
     int currentBoard[CELL_COUNT] = {0};
     int empty_cells[CELL_COUNT] = {-1};
     for (int i = 0; i < CELL_COUNT; i++)
         currentBoard[i] = start_board[i];
-    for (int k = 0; k < 10; k++)
+    for (int k = 0; k < 40; k++)
     {
         // Calucate notes
         fillEmpty<<<1, indx>>>(sudokuBoard, targetCell, app);
@@ -144,16 +164,16 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
         // Check notes, where we have posibility to enter something in cell
 
 #ifdef DEBUG_MODE
-        printf("Current board is "); printf((isBoardValid(currentBoard) ? "valid" : "invalid")); printf(":\n");
+        printf("Current board is ");
+        printf((isBoardValid(currentBoard) ? "valid" : "invalid"));
+        printf(":\n");
         printBoard(currentBoard);
-        //printBoardInfo(calculated);
+        // printBoardInfo(calculated);
 #endif
 
         int iWithLeastOptions = -1;
         int optionsWithI = -1;
         int emptyInAll[CELL_COUNT][BOARD_SIZE] = {0};
-
-        int sureChanges = 0;
 
         for (int i = 0; i < indx; i++)
         {
@@ -169,32 +189,45 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
                 }
             }
 
-            if (iWithLeastOptions < 0 || optionsWithI > tmp)
+            if ((iWithLeastOptions < 0 || optionsWithI > tmp) && tmp > 0)
             {
                 iWithLeastOptions = i;
                 optionsWithI = tmp;
             }
-#ifdef DEBUG_MODE
-            // printf("[%02d] Cell: %2d; Possible to input: ", i, calculated[i].cell);
-
-            // for (int j = 0; j < BOARD_SIZE; j++)
-            //{
-            //     printf("%d ", emptyInAll[i][j]);
-            // }
-            // printf("\n");
-#endif
         }
 
+        // Do move
+
         printf("Least options: %d; For cell: %d\n", optionsWithI, calculated[iWithLeastOptions].cell);
-        for (int i = 0; i < BOARD_SIZE; i++)
-            if (emptyInAll[iWithLeastOptions][i] == 1)
+        if (optionsWithI == 1)
+        {
+            for (int i = 0; i < BOARD_SIZE; i++)
+                if (emptyInAll[iWithLeastOptions][i] == 1)
+                {
+                    move m = move((int *)currentBoard, calculated[iWithLeastOptions].cell, (int *)emptyInAll[iWithLeastOptions]);
+                    currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
+                    break;
+                }
+        }
+        else if (optionsWithI > 1)
+        {
+            printf("Possibilities are: ");
+            for (int i = 0; i < BOARD_SIZE; i++)
             {
-                currentBoard[calculated[iWithLeastOptions].cell] = i + 1;
-                break;
+                if (emptyInAll[iWithLeastOptions][i] == 1)
+                {
+                    printf("%d ", i + 1);
+                }
             }
+            printf("for empty space\n");
+        }
+
+        // Prepear next step
 
 #ifdef DEBUG_MODE
-        printf("Board with changes is "); printf((isBoardValid(currentBoard) ? "valid" : "invalid")); printf(":\n");
+        printf("Board with changes is ");
+        printf((isBoardValid(currentBoard) ? "valid" : "invalid"));
+        printf(":\n");
         printBoard(currentBoard);
 #endif
 
@@ -267,26 +300,6 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
             }
         }
     }
-#ifdef DEBUG_MODE
-    // Check what notes we have
-
-    /*int numOfZerosRow = 0;
-    int numOfZerosColumn = 0;
-    int numOfZerosBlock = 0;
-
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        if (app[threadIdx.x].appeardInRow[i] == 0)
-            numOfZerosRow++;
-        if (app[threadIdx.x].appeardInColumn[i] == 0)
-            numOfZerosColumn++;
-        if (app[threadIdx.x].appeardInBlock[i] == 0)
-            numOfZerosBlock++;
-    }
-
-    printf("TARGET CELL - %d (id: %d); number of zeros row: %d; column: %d; block: %d\n", app[threadIdx.x].cell + 1, threadIdx.x, numOfZerosRow, numOfZerosColumn, numOfZerosBlock);*/
-#endif
-    __syncthreads();
 }
 
 __host__ int solveSudoku(const int *start_board, int *sudokuBoard, int *targetCell, appeared *app)
