@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include <stack>
+#include <chrono>
 
 #define N 3
 #define BOARD_SIZE (N * N)
@@ -562,6 +563,9 @@ int main()
     int *sudokuBoard = 0;
     int *targetCell = 0;
     appeared *app = 0;
-
-    return solveSudoku((int *)start_board, sudokuBoard, targetCell, app);
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    int tmp = solveSudoku((int *)start_board, sudokuBoard, targetCell, app);
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+    return tmp;
 }
