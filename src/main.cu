@@ -75,7 +75,6 @@ __host__ bool isBoardValid(int *sudokuBoard)
                 if (all[j] > 1)
                     return false;
         }
-        printf("Board with valid rows\n");
         for (int i = 0; i < BOARD_SIZE; i++)
         {
             int all[BOARD_SIZE] = {0};
@@ -88,7 +87,6 @@ __host__ bool isBoardValid(int *sudokuBoard)
                 if (all[j] > 1)
                     return false;
         }
-        printf("Board with valid columns\n");
         for (int i = 0; i < N; i++)
         {
             for (int j = 0; j < N; j++)
@@ -105,12 +103,10 @@ __host__ bool isBoardValid(int *sudokuBoard)
                 for (int k = 0; k < BOARD_SIZE; k++)
                     if (all[k] > 1)
                     {
-                        printf("Invalid block %d:%d\n", i, j);
                         return false;
                     }
             }
         }
-        printf("Board with valid blocks\n");
         return true;
 }
 
@@ -150,7 +146,7 @@ __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, 
 #ifdef DEBUG_MODE
         printf("Current board is "); printf((isBoardValid(currentBoard) ? "valid" : "invalid")); printf(":\n");
         printBoard(currentBoard);
-        printBoardInfo(calculated);
+        //printBoardInfo(calculated);
 #endif
 
         int iWithLeastOptions = -1;
@@ -242,7 +238,7 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
 
     for (int i = 0; i < BOARD_SIZE; i++)
     {
-        int tmp = sudokuBoard[app[threadIdx.x].cell / BOARD_SIZE + i];
+        int tmp = sudokuBoard[(app[threadIdx.x].cell / BOARD_SIZE) * BOARD_SIZE + i];
         if (tmp > 0)
         {
             app[threadIdx.x].appeardInRow[tmp - 1]++;
@@ -274,7 +270,7 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
 #ifdef DEBUG_MODE
     // Check what notes we have
 
-    int numOfZerosRow = 0;
+    /*int numOfZerosRow = 0;
     int numOfZerosColumn = 0;
     int numOfZerosBlock = 0;
 
@@ -288,7 +284,7 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
             numOfZerosBlock++;
     }
 
-    printf("TARGET CELL - %d (id: %d); number of zeros row: %d; column: %d; block: %d\n", app[threadIdx.x].cell + 1, threadIdx.x, numOfZerosRow, numOfZerosColumn, numOfZerosBlock);
+    printf("TARGET CELL - %d (id: %d); number of zeros row: %d; column: %d; block: %d\n", app[threadIdx.x].cell + 1, threadIdx.x, numOfZerosRow, numOfZerosColumn, numOfZerosBlock);*/
 #endif
     __syncthreads();
 }
