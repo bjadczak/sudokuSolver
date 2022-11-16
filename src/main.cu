@@ -29,6 +29,11 @@ struct possibilitie
     int poss[BOARD_SIZE] = {0};
 
 } typedef possibilitie;
+struct board
+{
+    int board[CELL_COUNT] = {0};
+
+} typedef board;
 
 struct move
 {
@@ -200,7 +205,7 @@ __device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, 
         {
             for (int i = 0; i < BOARD_SIZE; i++)
                 poss[indx].poss[i] = emptyInAll[i];
-            poss[indx].cell = cell;
+            poss[indx].cell = cell + 1;
             indx++;
         }
 
@@ -215,7 +220,7 @@ __device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, 
     *possCount = indx;
 }
 
-__global__ void runSolver(const int *currentBoard)
+__global__ void runSolver(const int *currentBoard, possibilitie *poss)
 {
     // Kerenl recives a board as an array size of CELL_COUNT
     // It generates valid boards that can be created
@@ -228,6 +233,7 @@ __global__ void runSolver(const int *currentBoard)
     // i.e. how many possibilites can ther be
     int indx = 0;
     int emptyCells[CELL_COUNT] = {0};
+    poss += threadIdx.x;
     for (int i = 0; i < CELL_COUNT; i++)
     {
         if (currentBoard[i] == 0)
@@ -237,21 +243,10 @@ __global__ void runSolver(const int *currentBoard)
         }
     }
 
-    possibilitie *poss = new possibilitie[indx];
-
     calculatePossibilites(currentBoard, (int *)emptyCells, poss, &indx);
 
     // We now have all possible otions that can be safely inputted into our
     // current board.
-    for (int i = 0; i < indx; i++)
-    {
-        int tmp = 0;
-        for (int j = 0; j < BOARD_SIZE; j++)
-            if (poss[i].poss[j] == 1)
-                tmp++;
-    }
-
-    delete[] poss;
 }
 
 __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, const int *start_board, cudaError_t &cudaStatus)
@@ -485,21 +480,16 @@ __global__ void fillEmpty(const int *sudokuBoard, const int *targetCell, appeare
     }
 }
 
-__host__ int solveSudoku(const int *start_board, int *sudokuBoard, int *targetCell, appeared *app)
+__host__ int solveSudoku(const int *start_board)
 {
     cudaError_t cudaStatus;
+    int *sudokuBoard = 0;
+    int tmpSudokuBoard[CELL_COUNT];
+    possibilitie *poss_d = 0, *poss_h = 0;
 
-    int empty_cells[CELL_COUNT] = {-1};
+    poss_h = new possibilitie[CELL_COUNT];
 
-    int indx = 0;
-    for (int i = 0; i < CELL_COUNT; i++)
-        if (start_board[i] == 0)
-        {
-            empty_cells[indx] = i;
-            indx++;
-        }
-
-    appeared calculated[CELL_COUNT];
+    std::stack<board> S;
 
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
@@ -509,51 +499,86 @@ __host__ int solveSudoku(const int *start_board, int *sudokuBoard, int *targetCe
         goto Error;
     }
 
-    // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void **)&sudokuBoard, CELL_COUNT * CELL_COUNT * sizeof(int));
+    cudaStatus = cudaMalloc((void **)&sudokuBoard, CELL_COUNT * sizeof(int));
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
 
-    cudaStatus = cudaMalloc((void **)&targetCell, CELL_COUNT * sizeof(int));
+    cudaStatus = cudaMalloc((void **)&poss_d, CELL_COUNT * sizeof(possibilitie));
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
 
-    cudaStatus = cudaMalloc((void **)&app, CELL_COUNT * sizeof(appeared));
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    for (int i = 0; i < CELL_COUNT; i++)
-    {
-        cudaStatus = cudaMemcpy((sudokuBoard + i * CELL_COUNT), start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-        if (cudaStatus != cudaSuccess)
-        {
-            fprintf(stderr, "cudaMemcpy failed!");
-            goto Error;
-        }
-    }
-
-    cudaStatus = cudaMemcpy(targetCell, empty_cells, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(sudokuBoard, start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
+
     printBoard((int *)start_board);
-    runSolver<<<1, 1>>>(sudokuBoard);
+    runSolver<<<1, 1>>>(sudokuBoard, poss_d);
+    // While first check is run, we copy start board to tmp storage
+    for (int i = 0; i < CELL_COUNT; i++)
+    {
+        tmpSudokuBoard[i] = start_board[i];
+    }
+
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+        goto Error;
+    }
+
+    cudaStatus = cudaDeviceSynchronize();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+        goto Error;
+    }
+
+    cudaStatus = cudaMemcpy(poss_h, poss_d, CELL_COUNT * sizeof(possibilitie), cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "cudaMemcpy failed! Returned error code %d\n", cudaStatus);
+        goto Error;
+    }
+
+    for (int i = 0; i < CELL_COUNT; i++)
+    {
+        if (poss_h[i].cell == -1)
+            break;
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            if (poss_h[i].poss[j] == 1)
+            {
+                tmpSudokuBoard[poss_h[i].cell - 1] = j;
+                board tmp;
+                for (int k = 0; k < CELL_COUNT; k++)
+                    tmp.board[k] = tmpSudokuBoard[k];
+                S.push(tmp);
+                tmpSudokuBoard[poss_h[i].cell - 1] = 0;
+            }
+        }
+    }
+    while (!S.empty())
+    {
+        board tmp = S.top();
+        S.pop();
+
+        // Now we have a board and will be generating new boards based on tmp
+        //
+    }
 
 Error:
     cudaFree(sudokuBoard);
-    cudaFree(targetCell);
-    cudaFree(app);
+    cudaFree(poss_d);
+    delete[] poss_h;
 
     return cudaStatus;
 }
@@ -684,11 +709,8 @@ int main()
             0,
         };
 
-    int *sudokuBoard = 0;
-    int *targetCell = 0;
-    appeared *app = 0;
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    int tmp = solveSudoku((int *)start_board, sudokuBoard, targetCell, app);
+    int tmp = solveSudoku((int *)start_board);
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
     return tmp;
