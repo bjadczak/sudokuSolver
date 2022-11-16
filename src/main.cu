@@ -23,6 +23,13 @@ struct appeared
 
 } typedef appeared;
 
+struct possibilitie
+{
+    int cell = -1;
+    int poss[BOARD_SIZE] = {0};
+
+} typedef possibilitie;
+
 struct move
 {
     int board[CELL_COUNT] = {0};
@@ -128,6 +135,123 @@ __host__ bool isBoardValid(int *sudokuBoard)
         }
     }
     return true;
+}
+
+__device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, possibilitie *poss, int *possCount)
+{
+    int cell = -1;
+
+    int appeardInRow[BOARD_SIZE] = {0};
+    int appeardInColumn[BOARD_SIZE] = {0};
+    int appeardInBlock[BOARD_SIZE] = {0};
+    int emptyInAll[BOARD_SIZE] = {0};
+
+    int indx = 0;
+    int tmp = 0;
+
+    for (int k = 0; k < *possCount; k++)
+    {
+        cell = emptyCells[k];
+
+        for (int i = 0; i < BOARD_SIZE; i++)
+        {
+            int tmp = currentBoard[(cell / BOARD_SIZE) * BOARD_SIZE + i];
+            if (tmp > 0)
+            {
+                appeardInRow[tmp - 1]++;
+            }
+        }
+
+        for (int i = 0; i < BOARD_SIZE; i++)
+        {
+
+            int tmp = currentBoard[cell % BOARD_SIZE + i * BOARD_SIZE];
+            if (tmp > 0)
+            {
+                appeardInColumn[tmp - 1]++;
+            }
+        }
+
+        int firstCellOfBlock = ((cell / BOARD_SIZE) / N) * BOARD_SIZE * N + ((cell % BOARD_SIZE) / N) * N;
+        for (int i = 0; i < N; i++)
+        {
+            for (int j = 0; j < N; j++)
+            {
+                int tmp = currentBoard[firstCellOfBlock + i * BOARD_SIZE + j];
+                if (tmp > 0)
+                {
+                    appeardInBlock[tmp - 1]++;
+                }
+            }
+        }
+
+        // Remember the possibilites
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            if (appeardInBlock[j] == 0 &&
+                appeardInColumn[j] == 0 &&
+                appeardInRow[j] == 0)
+            {
+                emptyInAll[j] = 1;
+                tmp++;
+            }
+        }
+        if (tmp > 0)
+        {
+            for (int i = 0; i < BOARD_SIZE; i++)
+                poss[indx].poss[i] = emptyInAll[i];
+            poss[indx].cell = cell;
+            indx++;
+        }
+
+        // Reset arrays
+        for (int i = 0; i < BOARD_SIZE; i++)
+        {
+            appeardInBlock[i] = appeardInColumn[i] = appeardInRow[i] = 0;
+        }
+        tmp = 0;
+    }
+
+    *possCount = indx;
+}
+
+__global__ void runSolver(const int *currentBoard)
+{
+    // Kerenl recives a board as an array size of CELL_COUNT
+    // It generates valid boards that can be created
+    // using given array and returns it to host.
+    // If in board exists cells that are "sure" meaning only
+    // one number can be inputed there, we only consider those
+    // boards.
+
+    // Count how many empty cells we have
+    // i.e. how many possibilites can ther be
+    int indx = 0;
+    int emptyCells[CELL_COUNT] = {0};
+    for (int i = 0; i < CELL_COUNT; i++)
+    {
+        if (currentBoard[i] == 0)
+        {
+            emptyCells[indx] = i;
+            indx++;
+        }
+    }
+
+    possibilitie *poss = new possibilitie[indx];
+
+    calculatePossibilites(currentBoard, (int *)emptyCells, poss, &indx);
+
+    // We now have all possible otions that can be safely inputted into our
+    // current board.
+    for (int i = 0; i < indx; i++)
+    {
+        int tmp = 0;
+        for (int j = 0; j < BOARD_SIZE; j++)
+            if (poss[i].poss[j] == 1)
+                tmp++;
+    }
+
+    delete[] poss;
 }
 
 __host__ void solve(int indx, int *sudokuBoard, int *targetCell, appeared *app, appeared *calculated, const int *start_board, cudaError_t &cudaStatus)
@@ -423,8 +547,8 @@ __host__ int solveSudoku(const int *start_board, int *sudokuBoard, int *targetCe
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
-
-    solve(indx, sudokuBoard, targetCell, app, calculated, start_board, cudaStatus);
+    printBoard((int *)start_board);
+    runSolver<<<1, 1>>>(sudokuBoard);
 
 Error:
     cudaFree(sudokuBoard);
