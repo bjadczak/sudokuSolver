@@ -11,7 +11,7 @@
 #define N 3
 #define BOARD_SIZE (N * N)
 #define CELL_COUNT (BOARD_SIZE * BOARD_SIZE)
-#define NUM_OF_THREADS 32
+#define NUM_OF_THREADS 1024
 #define NUM_OF_BLOCKS 10
 #define NUM_OF_KERNELS (NUM_OF_THREADS * NUM_OF_BLOCKS)
 
@@ -292,8 +292,8 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
     int indx = 0;
     int emptyCells[CELL_COUNT] = {0};
 
-    currentBoard += (CELL_COUNT)*threadIdx.x + (CELL_COUNT)*blockIdx.x;
-    possBoard += (BOARD_SIZE)*threadIdx.x + +(BOARD_SIZE)*blockIdx.x;
+    currentBoard += (CELL_COUNT)*threadIdx.x;
+    possBoard += (BOARD_SIZE)*threadIdx.x;
     if (!isBoardCorrect(currentBoard))
         return;
 
@@ -358,10 +358,10 @@ __host__ int solveSudoku(const int *start_board)
 {
     cudaError_t cudaStatus;
     int *sudokuBoard = 0;
-    int tmpSudokuBoard[CELL_COUNT * NUM_OF_KERNELS];
+    int tmpSudokuBoard[CELL_COUNT * NUM_OF_THREADS];
     possibleBoard *poss_d = 0, *poss_h = 0;
 
-    poss_h = new possibleBoard[BOARD_SIZE * NUM_OF_KERNELS];
+    poss_h = new possibleBoard[BOARD_SIZE * NUM_OF_THREADS];
     auto cmp = [](possibleBoard left, possibleBoard right)
     { return (left.status) > (right.status); };
     std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmp)> S(cmp);
@@ -374,14 +374,14 @@ __host__ int solveSudoku(const int *start_board)
         goto Error;
     }
 
-    cudaStatus = cudaMalloc((void **)&sudokuBoard, NUM_OF_KERNELS * CELL_COUNT * sizeof(int));
+    cudaStatus = cudaMalloc((void **)&sudokuBoard, NUM_OF_THREADS * CELL_COUNT * sizeof(int));
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
 
-    cudaStatus = cudaMalloc((void **)&poss_d, NUM_OF_KERNELS * BOARD_SIZE * sizeof(possibleBoard));
+    cudaStatus = cudaMalloc((void **)&poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard));
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMalloc failed!");
@@ -412,7 +412,7 @@ __host__ int solveSudoku(const int *start_board)
         goto Error;
     }
 
-    cudaStatus = cudaMemcpy(poss_h, poss_d, NUM_OF_KERNELS * BOARD_SIZE * sizeof(possibleBoard), cudaMemcpyDeviceToHost);
+    cudaStatus = cudaMemcpy(poss_h, poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard), cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess)
     {
         fprintf(stderr, "cudaMemcpy failed! Returned error code %d\n", cudaStatus);
@@ -438,7 +438,7 @@ __host__ int solveSudoku(const int *start_board)
         }
     }
 
-    while (!S.empty() && S.size() < 20000)
+    while (!S.empty())
     {
         // Input new boards
         int indx = 0;
@@ -737,6 +737,91 @@ int main()
             0,
             0,
             2,
+        };
+
+    const int start_board3[CELL_COUNT] =
+        {
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         };
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
