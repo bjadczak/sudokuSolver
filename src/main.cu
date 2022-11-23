@@ -292,6 +292,8 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
     int indx = 0;
     int emptyCells[CELL_COUNT] = {0};
 
+    int numOfEmptyCells = 0;
+
     currentBoard += (CELL_COUNT)*threadIdx.x;
     possBoard += (BOARD_SIZE)*threadIdx.x;
     if (!isBoardCorrect(currentBoard))
@@ -320,6 +322,7 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
             poss[i].poss[j] = 0;
     }
 
+    numOfEmptyCells = indx;
     calculatePossibilites(currentBoard, (int *)emptyCells, poss, &indx);
 
     // We now have all possible otions that can be safely inputted into our
@@ -346,7 +349,7 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
             if (poss[iWithLeastOptions].poss[i] == 1)
             {
 
-                possBoard[countOfBoards].status = leastOption;
+                possBoard[countOfBoards].status = leastOption + numOfEmptyCells;
                 possBoard[countOfBoards].board[poss[iWithLeastOptions].cell] = i + 1;
                 countOfBoards++;
             }
@@ -830,6 +833,10 @@ int main()
     std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
     begin = std::chrono::steady_clock::now();
     tmp = solveSudoku((int *)start_board2);
+    end = std::chrono::steady_clock::now();
+    std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+    begin = std::chrono::steady_clock::now();
+    tmp = solveSudoku((int *)start_board3);
     end = std::chrono::steady_clock::now();
     std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
     return tmp;
