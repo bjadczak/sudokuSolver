@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 
 #include <stack>
 #include <queue>
@@ -17,20 +18,10 @@
 
 //#define DEBUG_MODE
 
-struct appeared
-{
-    int cell = -1;
-
-    int appeardInRow[BOARD_SIZE] = {0};
-    int appeardInColumn[BOARD_SIZE] = {0};
-    int appeardInBlock[BOARD_SIZE] = {0};
-
-} typedef appeared;
-
 struct possibilitie
 {
-    int cell = -1;
     int poss[BOARD_SIZE] = {0};
+    int cell = -1;
 
 } typedef possibilitie;
 struct possibleBoard
@@ -45,53 +36,6 @@ struct board
 
 } typedef board;
 
-struct move
-{
-    int board[CELL_COUNT] = {0};
-    int cell = -1;
-    int possibilites[BOARD_SIZE] = {0};
-
-    move(int *currentBoard, int cell, int *possibilites)
-    {
-        for (int i = 0; i < CELL_COUNT; i++)
-            this->board[i] = currentBoard[i];
-
-        for (int i = 0; i < BOARD_SIZE; i++)
-            this->possibilites[i] = possibilites[i];
-
-        this->cell = cell;
-    }
-} typedef move;
-
-__global__ void
-fillEmpty(const int *sudokuBoard, const int *targetCell, appeared *app);
-
-__host__ void printBoardInfo(appeared *app)
-{
-    for (int i = 0; i < CELL_COUNT; i++)
-    {
-
-        printf("[%d]TARGET CELL - %d\n", i, app[i].cell);
-
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            printf("%d", app[i].appeardInRow[j]);
-        }
-        printf(" - Appeared in row\n");
-
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            printf("%d", app[i].appeardInColumn[j]);
-        }
-        printf(" - Appeared in column\n");
-
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            printf("%d", app[i].appeardInBlock[j]);
-        }
-        printf(" - Appeared in block\n");
-    }
-}
 __host__ void printBoard(int *sudokuBoard)
 {
     for (int i = 0; i < BOARD_SIZE; i++)
@@ -357,7 +301,7 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
 
     delete[] poss;
 }
-__host__ int solveSudoku(const int *start_board)
+__host__ int solveSudoku(int *start_board)
 {
     cudaError_t cudaStatus;
     int *sudokuBoard = 0;
@@ -532,312 +476,53 @@ Error:
     return cudaStatus;
 }
 
-int main()
+__host__ void loadBoard(int *board, std::ifstream &inFile)
 {
-    // Easy
-    // const int start_board[CELL_COUNT] =
-    //     {
-    //         3, 8, 6, 0, 0, 4, 7, 0, 0,
-    //         0, 0, 9, 0, 0, 0, 2, 0, 0,
-    //         0, 2, 0, 1, 0, 3, 8, 0, 5,
-    //         0, 7, 8, 0, 3, 0, 6, 2, 0,
-    //         0, 5, 2, 0, 0, 1, 0, 0, 4,
-    //         9, 4, 0, 2, 7, 0, 0, 0, 0,
-    //         2, 3, 0, 7, 4, 9, 5, 8, 6,
-    //         8, 0, 0, 0, 1, 0, 4, 0, 0,
-    //         4, 0, 0, 0, 0, 0, 0, 0, 2,
-    //     };
-    // Hard
-    // const int start_board[CELL_COUNT] =
-    //     {
-    //         0, 0, 1, 0, 0, 0, 3, 6, 0,
-    //         0, 0, 0, 0, 2, 0, 0, 0, 0,
-    //         3, 0, 0, 0, 5, 6, 0, 8, 0,
-    //         0, 0, 0, 9, 0, 0, 0, 0, 0,
-    //         0, 4, 0, 0, 0, 0, 0, 0, 7,
-    //         1, 0, 0, 0, 3, 8, 0, 5, 0,
-    //         0, 0, 0, 1, 0, 0, 0, 9, 0,
-    //         0, 0, 7, 0, 6, 9, 0, 0, 5,
-    //         6, 0, 0, 2, 0, 0, 0, 0, 0,
-    //     };
-    // const int start_board[CELL_COUNT] =
-    //     {
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //     };
-
-    const int start_board1[CELL_COUNT] =
+    std::string line;
+    for (int i = 0; i < BOARD_SIZE && getline(inFile, line); i++)
+    {
+        if (line.length() != BOARD_SIZE)
         {
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            3,
-            6,
-            0,
-            0,
-            0,
-            0,
-            0,
-            2,
-            0,
-            0,
-            0,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            6,
-            0,
-            8,
-            0,
-            0,
-            0,
-            0,
-            9,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            4,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            7,
-            1,
-            0,
-            0,
-            0,
-            3,
-            8,
-            0,
-            5,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            9,
-            0,
-            0,
-            0,
-            7,
-            0,
-            6,
-            9,
-            0,
-            0,
-            5,
-            6,
-            0,
-            0,
-            2,
-            0,
-            0,
-            0,
-            0,
-            0,
-        };
-    const int start_board2[CELL_COUNT] =
-        {
-            3,
-            8,
-            6,
-            0,
-            0,
-            4,
-            7,
-            0,
-            0,
-            0,
-            0,
-            9,
-            0,
-            0,
-            0,
-            2,
-            0,
-            0,
-            0,
-            2,
-            0,
-            1,
-            0,
-            3,
-            8,
-            0,
-            5,
-            0,
-            7,
-            8,
-            0,
-            3,
-            0,
-            6,
-            2,
-            0,
-            0,
-            5,
-            2,
-            0,
-            0,
-            1,
-            0,
-            0,
-            4,
-            9,
-            4,
-            0,
-            2,
-            7,
-            0,
-            0,
-            0,
-            0,
-            2,
-            3,
-            0,
-            7,
-            4,
-            9,
-            5,
-            8,
-            6,
-            8,
-            0,
-            0,
-            0,
-            1,
-            0,
-            4,
-            0,
-            0,
-            4,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            2,
-        };
+            i--;
+        }
+        else
+            for (int j = 0; j < BOARD_SIZE; j++)
+            {
+                board[i * BOARD_SIZE + j] = line[j] - '0';
+            }
+    }
+}
 
-    const int start_board3[CELL_COUNT] =
-        {
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        };
+int main(int argc, char **argv)
+{
 
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    int tmp = solveSudoku((int *)start_board1);
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
-    begin = std::chrono::steady_clock::now();
-    tmp = solveSudoku((int *)start_board2);
-    end = std::chrono::steady_clock::now();
-    std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
-    begin = std::chrono::steady_clock::now();
-    tmp = solveSudoku((int *)start_board3);
-    end = std::chrono::steady_clock::now();
-    std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+    std::ifstream inFS;
+    std::string fileName;
+
+    std::cout << "Input file: ";
+    std::cin >> fileName;
+
+    int *board = new int[CELL_COUNT];
+
+    std::chrono::steady_clock::time_point begin;
+    std::chrono::steady_clock::time_point end;
+    int tmp;
+
+    inFS.open(fileName);
+
+    while (!inFS.eof())
+    {
+        loadBoard(board, inFS);
+        begin = std::chrono::steady_clock::now();
+        tmp = solveSudoku(board);
+        end = std::chrono::steady_clock::now();
+        if (tmp != 0)
+            return tmp;
+        std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+    }
+
+    inFS.close();
+    delete[] board;
+
     return tmp;
 }
