@@ -1,24 +1,27 @@
 TARGET := sudokuSolver
-SRC_FILES := $(wildcard src/*.cu)
-OBJ_FILES := $(patsubst src%,obj%, $(patsubst %.cu,%.o,$(SRC_FILES)))
 
-INCLUDE := -I./src
-LIBPATH :=
-LIBS :=
+BUILD_DIR := ./build
+SRC_DIRS := ./src
 
 FLAGS := -std=c++11
 CXXFLAGS := $(FLAGS)
 
 CXX := nvcc
 
-all: $(OBJ_FILES)
-	$(CXX) $(CXXFLAGS) $(INCLUDE) $(OBJ_FILES) -o $(TARGET) $(LIBPATH) $(LIBS)
-	rm -r obj
+SRCS := $(shell find $(SRC_DIRS) -name '*.cu')
 
-$(OBJ_FILES): $(SRC_FILES)
-	mkdir obj
-	$(CXX) $(CXXFLAGS) $(INCLUDE) -c $< -o $@
+OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
+
+INC_DIRS := $(shell find $(SRC_DIRS) -type d)
+
+$(TARGET): $(OBJS)
+	$(CXX) $(OBJS) -o $@ $(LDFLAGS)
+
+$(BUILD_DIR)/%.cu.o: %.cu
+	mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 .PHONY: clean
 clean:
+	rm -r $(BUILD_DIR)
 	rm $(TARGET)

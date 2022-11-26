@@ -8,3 +8,6 @@
 .vscode
 # Final build
 sudokuSolver
+
+# Build directory
+build
