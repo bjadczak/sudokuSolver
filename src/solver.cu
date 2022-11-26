@@ -405,6 +405,16 @@ __host__ int solveSudoku(int *start_board)
         }
     }
 
+    if (isBoardValid(start_board))
+    {
+        printf("SOLVED!\n");
+        printBoard(start_board);
+    }
+    else
+    {
+        printf("BOARD UNSOLVABLE!\n");
+    }
+
 Error:
     cudaFree(sudokuBoard);
     cudaFree(poss_d);
