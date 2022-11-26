@@ -36,7 +36,6 @@ struct board
 
 __host__ void printBoard(int *sudokuBoard);
 __host__ __device__ bool isBoardValid(int *sudokuBoard);
-__device__ bool isBoardCorrect(const int *sudokuBoard);
 __device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, possibilitie *poss, int *possCount);
 __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard);
 __host__ int solveSudoku(int *start_board);

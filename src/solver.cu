@@ -11,6 +11,7 @@ __host__ void printBoard(int *sudokuBoard)
         printf("\n");
     }
 }
+// Valid board is correct and doesn't have any empty cells
 __host__ __device__ bool isBoardValid(int *sudokuBoard)
 {
     for (int i = 0; i < BOARD_SIZE; i++)
@@ -59,54 +60,6 @@ __host__ __device__ bool isBoardValid(int *sudokuBoard)
     }
     return true;
 }
-__device__ bool isBoardCorrect(const int *sudokuBoard)
-{
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        int all[BOARD_SIZE] = {0};
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            if (sudokuBoard[i * BOARD_SIZE + j] > 0)
-                all[sudokuBoard[i * BOARD_SIZE + j] - 1]++;
-        }
-        for (int j = 0; j < BOARD_SIZE; j++)
-            if (all[j] > 1)
-                return false;
-    }
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        int all[BOARD_SIZE] = {0};
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            if (sudokuBoard[j * BOARD_SIZE + i] > 0)
-                all[sudokuBoard[j * BOARD_SIZE + i] - 1]++;
-        }
-        for (int j = 0; j < BOARD_SIZE; j++)
-            if (all[j] > 1)
-                return false;
-    }
-    for (int i = 0; i < N; i++)
-    {
-        for (int j = 0; j < N; j++)
-        {
-            int all[BOARD_SIZE] = {0};
-            for (int x = i * N; x < (i + 1) * N; x++)
-            {
-                for (int y = j * N; y < (j + 1) * N; y++)
-                {
-                    if (sudokuBoard[x * BOARD_SIZE + y] > 0)
-                        all[sudokuBoard[x * BOARD_SIZE + y] - 1]++;
-                }
-            }
-            for (int k = 0; k < BOARD_SIZE; k++)
-                if (all[k] > 1)
-                {
-                    return false;
-                }
-        }
-    }
-    return true;
-}
 
 __device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, possibilitie *poss, int *possCount)
 {
@@ -120,10 +73,13 @@ __device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, 
     int indx = 0;
     int tmp = 0;
 
+    // Look thourgh all empty cells
+
     for (int k = 0; k < *possCount; k++)
     {
         cell = emptyCells[k];
 
+        // Based on what is in other cells we input possible numbers
         for (int i = 0; i < BOARD_SIZE; i++)
         {
             int tmp = currentBoard[(cell / BOARD_SIZE) * BOARD_SIZE + i];
@@ -167,12 +123,21 @@ __device__ void calculatePossibilites(const int *currentBoard, int *emptyCells, 
                 tmp++;
             }
         }
+        // We ONLY store options that have possiblitie to be inputed
+        // If cell is locked i.e. there is no possiblitie for anything
+        // to be inputted there we do not consider it
         if (tmp > 0)
         {
             for (int i = 0; i < BOARD_SIZE; i++)
                 poss[indx].poss[i] = emptyInAll[i];
             poss[indx].cell = cell;
             indx++;
+        }
+        else
+        {
+            // Discard this Kernels board
+            *possCount = 0;
+            indx = 0;
         }
 
         // Reset arrays
@@ -204,8 +169,6 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
 
     currentBoard += (CELL_COUNT)*threadIdx.x;
     possBoard += (BOARD_SIZE)*threadIdx.x;
-    if (!isBoardCorrect(currentBoard))
-        return;
 
     possibilitie *poss = new possibilitie[CELL_COUNT];
     for (int i = 0; i < CELL_COUNT; i++)
@@ -233,8 +196,12 @@ __global__ void runSolver(const int *currentBoard, possibleBoard *possBoard)
     numOfEmptyCells = indx;
     calculatePossibilites(currentBoard, (int *)emptyCells, poss, &indx);
 
-    // We now have all possible otions that can be safely inputted into our
-    // current board.
+    // We now have all possible options that can be safely inputted into our
+    // current board. We look through them to find cell with least possibilities
+    // then we generate boards with all possibilites for that cell.
+    //
+    // We also store how many possibilites there were and how many empty cells we
+    // had in this one board.
 
     int leastOption = 11, iWithLeastOptions = -1;
 
@@ -277,7 +244,6 @@ __host__ int solveSudoku(int *start_board)
     { return (left.status) > (right.status); };
     std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmp)> S(cmp);
 
-    // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
     if (cudaStatus != cudaSuccess)
     {
@@ -306,6 +272,8 @@ __host__ int solveSudoku(int *start_board)
         goto Error;
     }
 
+    // We run 1 Kernel for our start board, this will give us at least 1 (if board is not finished on start)
+    // up to 9 boards. For those we run the solver further
     printBoard((int *)start_board);
     runSolver<<<1, 1>>>(sudokuBoard, poss_d);
 
@@ -330,6 +298,7 @@ __host__ int solveSudoku(int *start_board)
         goto Error;
     }
 
+    // Store the possible boards in priority queue
     for (int i = 0; i < NUM_OF_THREADS; i++)
     {
         for (int j = 0; j < BOARD_SIZE; j++)
@@ -349,6 +318,7 @@ __host__ int solveSudoku(int *start_board)
         }
     }
 
+    // Until there are boards to be checked
     while (!S.empty())
     {
         // Input new boards
@@ -356,6 +326,7 @@ __host__ int solveSudoku(int *start_board)
 #ifdef DEBUG_MODE
         printf("%ld\n", S.size());
 #endif
+        // Fetch as many boards as we have Threads avaliable
         for (; indx < NUM_OF_THREADS && !S.empty(); indx++)
         {
             possibleBoard tmp = S.top();
@@ -364,6 +335,7 @@ __host__ int solveSudoku(int *start_board)
             printf("Running thread %02d with board:\n", indx + 1);
             printBoard(tmp.board);
 #endif
+            // Write down the boards to GPU memory
             for (int j = 0; j < CELL_COUNT; j++)
             {
                 tmpSudokuBoard[indx * CELL_COUNT + j] = tmp.board[j];
@@ -380,6 +352,7 @@ __host__ int solveSudoku(int *start_board)
 #ifdef DEBUG_MODE
         printf("Running %02d threads\n", indx);
 #endif
+        // Run Kernels
         runSolver<<<1, indx>>>(sudokuBoard, poss_d);
 
         // Fetch resoults
