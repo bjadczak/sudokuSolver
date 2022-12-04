@@ -1,4 +1,4 @@
-#include "solver.cuh"
+#include "headers/solver.cuh"
 
 #include <stdio.h>
 #include <iostream>
