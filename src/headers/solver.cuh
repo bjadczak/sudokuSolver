@@ -12,4 +12,5 @@ const auto cmpQueue = [](possibleBoard left, possibleBoard right)
 
 __host__ int solveSudoku(int *start_board);
 __host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q);
+__host__ void addToQueue(std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q, int *board, int status);
 __host__ void fetchResoults(cudaError_t &cudaStatus, possibleBoard *poss_h, possibleBoard *poss_d) throw();

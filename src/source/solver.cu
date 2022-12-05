@@ -38,40 +38,9 @@ __host__ int solveSudoku(int *start_board)
             throw sudokuSolverException(errMess.str());
         }
 
-        cudaStatus = cudaMemcpy(sudokuBoard, start_board, CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "cudaMemcpy failed! Returned error code " << cudaStatus;
-            throw sudokuSolverException(errMess.str());
-        }
+        printBoard(start_board);
 
-        // We run 1 Kernel for our start board, this will give us at least 1 (if board is not finished on start)
-        // up to 9 boards. For those we run the solver further
-        printBoard((int *)start_board);
-        runSolver<<<1, 1>>>(sudokuBoard, poss_d);
-
-        fetchResoults(cudaStatus, poss_h, poss_d);
-
-        // Store the possible boards in priority queue
-        for (int i = 0; i < NUM_OF_THREADS; i++)
-        {
-            for (int j = 0; j < BOARD_SIZE; j++)
-            {
-                if (poss_h[i * BOARD_SIZE + j].status >= 1)
-                {
-#ifdef DEBUG_MODE
-                    printf("Possible board [THREAD: %d][POSS: %d]:\n", i + 1, j + 1);
-                    printBoard(poss_h[i * BOARD_SIZE + j].board);
-#endif
-                    possibleBoard tmp;
-                    for (int k = 0; k < CELL_COUNT; k++)
-                        tmp.board[k] = poss_h[i * BOARD_SIZE + j].board[k];
-                    tmp.status = poss_h[i * BOARD_SIZE + j].status;
-                    S.push(tmp);
-                }
-            }
-        }
+        addToQueue(S, start_board, 0);
 
         // Until there are boards to be checked
         while (!S.empty())
@@ -136,11 +105,6 @@ __host__ int solveSudoku(int *start_board)
     catch (sudokuSolverException &e)
     {
         fprintf(stderr, "%s", e.what());
-        cudaFree(sudokuBoard);
-        cudaFree(poss_d);
-        delete[] poss_h;
-
-        return cudaStatus;
     }
 
     cudaFree(sudokuBoard);
@@ -167,16 +131,20 @@ __host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priorit
                     return poss_h[i * BOARD_SIZE + j].board;
                 }
 
-                possibleBoard tmp;
-                for (int k = 0; k < CELL_COUNT; k++)
-                    tmp.board[k] = poss_h[i * BOARD_SIZE + j].board[k];
-                tmp.status = poss_h[i * BOARD_SIZE + j].status;
-                Q.push(tmp);
+                addToQueue(Q, poss_h[i * BOARD_SIZE + j].board, poss_h[i * BOARD_SIZE + j].status);
             }
         }
     }
 
     return nullptr;
+}
+__host__ void addToQueue(std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q, int *board, int status)
+{
+    possibleBoard tmp;
+    for (int i = 0; i < CELL_COUNT; i++)
+        tmp.board[i] = board[i];
+    tmp.status = 0;
+    Q.push(tmp);
 }
 __host__ void fetchResoults(cudaError_t &cudaStatus, possibleBoard *poss_h, possibleBoard *poss_d) throw()
 {
