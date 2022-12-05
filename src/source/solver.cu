@@ -4,7 +4,7 @@ __host__ int solveSudoku(int *start_board)
 {
     cudaError_t cudaStatus;
     int *sudokuBoard = 0;
-    int tmpSudokuBoard[CELL_COUNT * NUM_OF_THREADS];
+
     possibleBoard *poss_d = 0, *poss_h = 0;
 
     poss_h = new possibleBoard[BOARD_SIZE * NUM_OF_THREADS];
@@ -25,36 +25,13 @@ __host__ int solveSudoku(int *start_board)
         {
             // Input new boards
             int indx = 0;
+
 #ifdef DEBUG_MODE
             printf("%ld\n", S.size());
 #endif
-            // Fetch as many boards as we have Threads avaliable
-            for (; indx < NUM_OF_THREADS && !S.empty(); indx++)
-            {
-                possibleBoard tmp = S.top();
-                S.pop();
-#ifdef DEBUG_MODE
-                printf("Running thread %02d with board:\n", indx + 1);
-                printBoard(tmp.board);
-#endif
-                // Write down the boards to GPU memory
-                for (int j = 0; j < CELL_COUNT; j++)
-                {
-                    tmpSudokuBoard[indx * CELL_COUNT + j] = tmp.board[j];
-                }
-            }
 
-            // Copy memory and run kernel
-            cudaStatus = cudaMemcpy(sudokuBoard, tmpSudokuBoard, (NUM_OF_THREADS)*CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
-            if (cudaStatus != cudaSuccess)
-            {
-                std::ostringstream errMess;
-                errMess << "cudaMemcpy failed! Returned error code " << cudaStatus;
-                throw sudokuSolverException(errMess.str());
-            }
-#ifdef DEBUG_MODE
-            printf("Running %02d threads\n", indx);
-#endif
+            addNewBoardsToDevice(indx, S, sudokuBoard, cudaStatus);
+
             // Run Kernels
             runSolver<<<1, indx>>>(sudokuBoard, poss_d);
 
@@ -117,6 +94,40 @@ __host__ void prepareDevice(cudaError_t &cudaStatus, void **poss_d, void **sudok
         errMess << "cudaMalloc failed! Returned error code " << cudaStatus;
         throw sudokuSolverException(errMess.str());
     }
+}
+
+__host__ void addNewBoardsToDevice(int &indx, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q, int *sudokuBoard, cudaError_t &cudaStatus) throw()
+{
+    int tmpSudokuBoard[CELL_COUNT * NUM_OF_THREADS];
+
+    // Fetch as many boards as we have Threads avaliable
+    for (; indx < NUM_OF_THREADS && !Q.empty(); indx++)
+    {
+        possibleBoard tmp = Q.top();
+        Q.pop();
+#ifdef DEBUG_MODE
+        printf("Running thread %02d with board:\n", indx + 1);
+        printBoard(tmp.board);
+#endif
+        // Write down the boards to GPU memory
+        for (int j = 0; j < CELL_COUNT; j++)
+        {
+            tmpSudokuBoard[indx * CELL_COUNT + j] = tmp.board[j];
+        }
+    }
+
+    // Copy memory and run kernel
+    cudaStatus = cudaMemcpy(sudokuBoard, tmpSudokuBoard, (NUM_OF_THREADS)*CELL_COUNT * sizeof(int), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "cudaMemcpy failed! Returned error code " << cudaStatus;
+        throw sudokuSolverException(errMess.str());
+    }
+
+#ifdef DEBUG_MODE
+    printf("Running %02d threads\n", indx);
+#endif
 }
 
 __host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q)
