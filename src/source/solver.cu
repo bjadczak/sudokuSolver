@@ -8,9 +8,8 @@ __host__ int solveSudoku(int *start_board)
     possibleBoard *poss_d = 0, *poss_h = 0;
 
     poss_h = new possibleBoard[BOARD_SIZE * NUM_OF_THREADS];
-    auto cmp = [](possibleBoard left, possibleBoard right)
-    { return (left.status) > (right.status); };
-    std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmp)> S(cmp);
+
+    std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> S(cmpQueue);
 
     try
     {
@@ -160,35 +159,11 @@ __host__ int solveSudoku(int *start_board)
             }
 
             // Add new boards to S
-            for (int i = 0; i < indx; i++)
+            int *tmpBoard;
+            if ((tmpBoard = addNewBoardsToQueue(indx, poss_h, S)))
             {
-                for (int j = 0; j < BOARD_SIZE; j++)
-                {
-                    if (poss_h[i * BOARD_SIZE + j].status >= 1)
-                    {
-#ifdef DEBUG_MODE
-                        printf("Possible board [THREAD: %d][POSS: %d]:\n", i + 1, j + 1);
-                        printBoard(poss_h[i * BOARD_SIZE + j].board);
-#endif
-                        if (isBoardValid(poss_h[i * BOARD_SIZE + j].board))
-                        {
-                            printf("SOLVED!\n");
-                            printBoard(poss_h[i * BOARD_SIZE + j].board);
-
-                            cudaFree(sudokuBoard);
-                            cudaFree(poss_d);
-                            delete[] poss_h;
-
-                            return cudaStatus;
-                        }
-
-                        possibleBoard tmp;
-                        for (int k = 0; k < CELL_COUNT; k++)
-                            tmp.board[k] = poss_h[i * BOARD_SIZE + j].board[k];
-                        tmp.status = poss_h[i * BOARD_SIZE + j].status;
-                        S.push(tmp);
-                    }
-                }
+                start_board = tmpBoard;
+                break;
             }
         }
 
@@ -217,4 +192,33 @@ __host__ int solveSudoku(int *start_board)
     delete[] poss_h;
 
     return cudaStatus;
+}
+
+__host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q)
+{
+    for (int i = 0; i < indx; i++)
+    {
+        for (int j = 0; j < BOARD_SIZE; j++)
+        {
+            if (poss_h[i * BOARD_SIZE + j].status >= 1)
+            {
+#ifdef DEBUG_MODE
+                printf("Possible board [THREAD: %d][POSS: %d]:\n", i + 1, j + 1);
+                printBoard(poss_h[i * BOARD_SIZE + j].board);
+#endif
+                if (isBoardValid(poss_h[i * BOARD_SIZE + j].board))
+                {
+                    return poss_h[i * BOARD_SIZE + j].board;
+                }
+
+                possibleBoard tmp;
+                for (int k = 0; k < CELL_COUNT; k++)
+                    tmp.board[k] = poss_h[i * BOARD_SIZE + j].board[k];
+                tmp.status = poss_h[i * BOARD_SIZE + j].status;
+                Q.push(tmp);
+            }
+        }
+    }
+
+    return nullptr;
 }
