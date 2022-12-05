@@ -14,29 +14,7 @@ __host__ int solveSudoku(int *start_board)
     try
     {
 
-        cudaStatus = cudaSetDevice(0);
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "cudaSetDevice failed! Do you have a CUDA-capable GPU installed? Returned error code " << cudaStatus;
-            throw sudokuSolverException(errMess.str());
-        }
-
-        cudaStatus = cudaMalloc((void **)&sudokuBoard, NUM_OF_THREADS * CELL_COUNT * sizeof(int));
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "cudaMalloc failed! Returned error code " << cudaStatus;
-            throw sudokuSolverException(errMess.str());
-        }
-
-        cudaStatus = cudaMalloc((void **)&poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard));
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "cudaMalloc failed! Returned error code " << cudaStatus;
-            throw sudokuSolverException(errMess.str());
-        }
+        prepareDevice(cudaStatus, (void **)&poss_d, (void **)&sudokuBoard);
 
         printBoard(start_board);
 
@@ -112,6 +90,33 @@ __host__ int solveSudoku(int *start_board)
     delete[] poss_h;
 
     return cudaStatus;
+}
+
+__host__ void prepareDevice(cudaError_t &cudaStatus, void **poss_d, void **sudokuBoard) throw()
+{
+    cudaStatus = cudaSetDevice(0);
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "cudaSetDevice failed! Do you have a CUDA-capable GPU installed? Returned error code " << cudaStatus;
+        throw sudokuSolverException(errMess.str());
+    }
+
+    cudaStatus = cudaMalloc(sudokuBoard, NUM_OF_THREADS * CELL_COUNT * sizeof(int));
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "cudaMalloc failed! Returned error code " << cudaStatus;
+        throw sudokuSolverException(errMess.str());
+    }
+
+    cudaStatus = cudaMalloc(poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard));
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "cudaMalloc failed! Returned error code " << cudaStatus;
+        throw sudokuSolverException(errMess.str());
+    }
 }
 
 __host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q)
