@@ -51,29 +51,7 @@ __host__ int solveSudoku(int *start_board)
         printBoard((int *)start_board);
         runSolver<<<1, 1>>>(sudokuBoard, poss_d);
 
-        cudaStatus = cudaGetLastError();
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "Kernel launch failed: " << cudaGetErrorString(cudaStatus);
-            throw sudokuSolverException(errMess.str());
-        }
-
-        cudaStatus = cudaDeviceSynchronize();
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "cudaDeviceSynchronize returned error code " << cudaStatus;
-            throw sudokuSolverException(errMess.str());
-        }
-
-        cudaStatus = cudaMemcpy(poss_h, poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard), cudaMemcpyDeviceToHost);
-        if (cudaStatus != cudaSuccess)
-        {
-            std::ostringstream errMess;
-            errMess << "cudaMemcpy failed! Returned error code " << cudaStatus;
-            throw sudokuSolverException(errMess.str());
-        }
+        fetchResoults(cudaStatus, poss_h, poss_d);
 
         // Store the possible boards in priority queue
         for (int i = 0; i < NUM_OF_THREADS; i++)
@@ -134,29 +112,7 @@ __host__ int solveSudoku(int *start_board)
             runSolver<<<1, indx>>>(sudokuBoard, poss_d);
 
             // Fetch resoults
-            cudaStatus = cudaGetLastError();
-            if (cudaStatus != cudaSuccess)
-            {
-                std::ostringstream errMess;
-                errMess << "Kernel launch failed: " << cudaGetErrorString(cudaStatus);
-                throw sudokuSolverException(errMess.str());
-            }
-
-            cudaStatus = cudaDeviceSynchronize();
-            if (cudaStatus != cudaSuccess)
-            {
-                std::ostringstream errMess;
-                errMess << "cudaDeviceSynchronize returned error code " << cudaStatus;
-                throw sudokuSolverException(errMess.str());
-            }
-
-            cudaStatus = cudaMemcpy(poss_h, poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard), cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess)
-            {
-                std::ostringstream errMess;
-                errMess << "cudaMemcpy failed! Returned error code " << cudaStatus;
-                throw sudokuSolverException(errMess.str());
-            }
+            fetchResoults(cudaStatus, poss_h, poss_d);
 
             // Add new boards to S
             int *tmpBoard;
@@ -221,4 +177,30 @@ __host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priorit
     }
 
     return nullptr;
+}
+__host__ void fetchResoults(cudaError_t &cudaStatus, possibleBoard *poss_h, possibleBoard *poss_d) throw()
+{
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "Kernel launch failed: " << cudaGetErrorString(cudaStatus);
+        throw sudokuSolverException(errMess.str());
+    }
+
+    cudaStatus = cudaDeviceSynchronize();
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "cudaDeviceSynchronize returned error code " << cudaStatus;
+        throw sudokuSolverException(errMess.str());
+    }
+
+    cudaStatus = cudaMemcpy(poss_h, poss_d, NUM_OF_THREADS * BOARD_SIZE * sizeof(possibleBoard), cudaMemcpyDeviceToHost);
+    if (cudaStatus != cudaSuccess)
+    {
+        std::ostringstream errMess;
+        errMess << "cudaMemcpy failed! Returned error code " << cudaStatus;
+        throw sudokuSolverException(errMess.str());
+    }
 }
