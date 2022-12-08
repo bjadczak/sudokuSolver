@@ -1,6 +1,6 @@
 #include "../headers/solver.cuh"
 
-__host__ int solveSudoku(int *start_board)
+__host__ int solveSudoku(int *start_board, bool *ifSolved)
 {
     cudaError_t cudaStatus;
     int *sudokuBoard = 0;
@@ -9,28 +9,28 @@ __host__ int solveSudoku(int *start_board)
 
     poss_h = new possibleBoard[BOARD_SIZE * NUM_OF_THREADS];
 
-    std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> S(cmpQueue);
+    std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> Q(cmpQueue);
 
     try
     {
 
         prepareDevice(cudaStatus, (void **)&poss_d, (void **)&sudokuBoard);
-
+#ifdef PRINT_BOARDS
         printBoard(start_board);
-
-        addToQueue(S, start_board, 0);
+#endif
+        addToQueue(Q, start_board, 0);
 
         // Until there are boards to be checked
-        while (!S.empty())
+        while (!Q.empty())
         {
             // Input new boards
             int indx = 0;
 
 #ifdef DEBUG_MODE
-            printf("%ld\n", S.size());
+            printf("%ld\n", Q.size());
 #endif
 
-            addNewBoardsToDevice(indx, S, sudokuBoard, cudaStatus);
+            addNewBoardsToDevice(indx, Q, sudokuBoard, cudaStatus);
 
             // Run Kernels
             runSolver<<<1, indx>>>(sudokuBoard, poss_d);
@@ -40,7 +40,7 @@ __host__ int solveSudoku(int *start_board)
 
             // Add new boards to S
             int *tmpBoard;
-            if ((tmpBoard = addNewBoardsToQueue(indx, poss_h, S)))
+            if ((tmpBoard = addNewBoardsToQueue(indx, poss_h, Q)))
             {
                 start_board = tmpBoard;
                 break;
@@ -50,11 +50,17 @@ __host__ int solveSudoku(int *start_board)
         if (isBoardValid(start_board))
         {
             printf("SOLVED!\n");
+#ifdef PRINT_BOARDS
             printBoard(start_board);
+#endif
+            if (ifSolved != nullptr)
+                *ifSolved = true;
         }
         else
         {
             printf("BOARD UNSOLVABLE!\n");
+            if (ifSolved != nullptr)
+                *ifSolved = false;
         }
     }
     catch (sudokuSolverException &e)

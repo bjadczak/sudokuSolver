@@ -10,7 +10,7 @@
 const auto cmpQueue = [](possibleBoard left, possibleBoard right)
 { return (left.status) > (right.status); };
 
-__host__ int solveSudoku(int *start_board);
+__host__ int solveSudoku(int *start_board, bool *ifSolved = nullptr);
 __host__ void prepareDevice(cudaError_t &cudaStatus, void **poss_d, void **sudokuBoard) throw();
 __host__ void addNewBoardsToDevice(int &indx, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q, int *sudokuBoard, cudaError_t &cudaStatus) throw();
 __host__ int *addNewBoardsToQueue(int &indx, possibleBoard *poss_h, std::priority_queue<possibleBoard, std::vector<possibleBoard>, decltype(cmpQueue)> &Q);

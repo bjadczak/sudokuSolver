@@ -9,6 +9,9 @@
 #define NUM_OF_BLOCKS 10
 #define NUM_OF_KERNELS (NUM_OF_THREADS * NUM_OF_BLOCKS)
 
+// #define DEBUG_MODE
+// #define PRINT_BOARDS
+
 struct possibilitie
 {
     int poss[BOARD_SIZE] = {0};
