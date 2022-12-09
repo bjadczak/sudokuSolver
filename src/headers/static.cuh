@@ -10,7 +10,7 @@
 #define NUM_OF_KERNELS (NUM_OF_THREADS * NUM_OF_BLOCKS)
 
 // #define DEBUG_MODE
-// #define PRINT_BOARDS
+#define PRINT_BOARDS
 
 struct possibilitie
 {
